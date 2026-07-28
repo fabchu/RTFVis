@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { openDb, type Db } from "../src/db.js";
+import { getRoster, openDb, type Db } from "../src/db.js";
 import { pollOnce, startPolling } from "../src/poller.js";
 import type { ScanSource } from "../src/sources/types.js";
 
@@ -48,6 +48,20 @@ describe("pollOnce", () => {
     await pollOnce(source, db);
 
     expect(source.fetchScansSince).toHaveBeenNthCalledWith(2, "2026-07-25T09:15:00.000Z");
+  });
+
+  it("löst Sheet-Streckenbezeichnungen im Roster vor dem Speichern in unsere interne Routen-ID auf", async () => {
+    const source = mockSource();
+    (source.fetchRoster as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { startNumber: "101", category: "RTF", routeId: "RTF - 49 km" },
+      { startNumber: "102", category: "CTF", routeId: "unbekannte Streckenbezeichnung" },
+    ]);
+
+    await pollOnce(source, db);
+
+    const roster = getRoster(db);
+    expect(roster.find((r) => r.startNumber === "101")?.routeId).toBe("rtf-49");
+    expect(roster.find((r) => r.startNumber === "102")?.routeId).toBeUndefined();
   });
 
   it("dedupliziert erneut gemeldete Scans über die Sicherheitsspanne hinweg", async () => {

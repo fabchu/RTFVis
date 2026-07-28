@@ -69,7 +69,15 @@ export function replaceRoster(db: Db, roster: RosterEntry[]): void {
   db.exec("BEGIN");
   try {
     db.prepare(`DELETE FROM roster`).run();
-    const stmt = db.prepare(`INSERT INTO roster (start_number, category, route_id) VALUES (?, ?, ?)`);
+    // ON CONFLICT statt eines reinen INSERT: das Sheet kann pro Poll dieselbe Startnummer
+    // mehrfach enthalten (Tippfehler, nachträglich korrigierte Zeile, die nicht gelöscht
+    // wurde). Ohne Konfliktbehandlung crasht das mit UNIQUE constraint failed und blockiert
+    // dadurch jeden weiteren Poll. Bei einem Duplikat gewinnt der zuletzt verarbeitete
+    // Eintrag (= letzte Zeile im Sheet), da spätere Einträge frühere hier überschreiben.
+    const stmt = db.prepare(
+      `INSERT INTO roster (start_number, category, route_id) VALUES (?, ?, ?)
+       ON CONFLICT(start_number) DO UPDATE SET category = excluded.category, route_id = excluded.route_id`,
+    );
     for (const entry of roster) {
       stmt.run(entry.startNumber, entry.category, entry.routeId ?? null);
     }

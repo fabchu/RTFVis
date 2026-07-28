@@ -75,6 +75,20 @@ describe("replaceRoster / getRoster", () => {
     expect(roster.find((r) => r.startNumber === "101")).toBeUndefined();
     expect(roster.find((r) => r.startNumber === "102")?.routeId).toBeUndefined();
   });
+
+  it("crasht nicht bei doppelter Startnummer im selben Batch, sondern übernimmt den letzten Eintrag (Regression)", () => {
+    // Reales Beispiel aus dem Sheet: Startnummer 13 kam zweimal vor (Tippfehler/nachträglich
+    // korrigierte Zeile) und ließ den reinen INSERT vorher mit UNIQUE constraint failed
+    // crashen -- das hätte am Renntag jeden weiteren Poll blockiert.
+    replaceRoster(db, [
+      { startNumber: "13", category: "Jedermann", routeId: "jed-13" },
+      { startNumber: "13", category: "Jedermann", routeId: "jed-13-korrigiert" },
+    ]);
+
+    const roster = getRoster(db);
+    expect(roster).toHaveLength(1);
+    expect(roster[0]).toEqual({ startNumber: "13", category: "Jedermann", routeId: "jed-13-korrigiert" });
+  });
 });
 
 describe("poller_state", () => {

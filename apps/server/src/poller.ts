@@ -1,4 +1,5 @@
 import { getPollerState, insertScans, replaceRoster, setPollerState, type Db } from "./db.js";
+import { mapSheetRouteId } from "./routeNameMapping.js";
 import type { ScanSource } from "./sources/types.js";
 
 const LAST_SCAN_TIMESTAMP_KEY = "lastSeenMaxScanTimestampUtc";
@@ -18,7 +19,8 @@ export interface PollResult {
 }
 
 export async function pollOnce(source: ScanSource, db: Db): Promise<PollResult> {
-  const roster = await source.fetchRoster();
+  const rawRoster = await source.fetchRoster();
+  const roster = rawRoster.map((entry) => ({ ...entry, routeId: mapSheetRouteId(entry.routeId) }));
   replaceRoster(db, roster);
 
   const lastSeen = getPollerState(db, LAST_SCAN_TIMESTAMP_KEY);
