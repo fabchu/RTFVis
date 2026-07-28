@@ -1,11 +1,22 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
 import { openDb } from "./db.js";
 import { startPolling } from "./poller.js";
 import { PollStatusTracker } from "./pollStatus.js";
 import { buildServer } from "./server.js";
 import { createSource } from "./sources/index.js";
+
+// .env liegt neben package.json (apps/server/.env). Wird hier geladen statt vorauszusetzen,
+// dass der Aufrufer die Variablen schon im Environment hat (z.B. "pnpm race" tut das nicht) —
+// ohne das schlägt loadConfig() unten mit einer verwirrenden "Variable fehlt"-Meldung fehl.
+// Optional: fehlt die Datei (z.B. DATA_SOURCE wird stattdessen direkt im Environment
+// gesetzt), einfach überspringen statt einen Fehler zu werfen.
+const envPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.env");
+if (existsSync(envPath)) {
+  process.loadEnvFile(envPath);
+}
 
 const config = loadConfig();
 mkdirSync(path.dirname(config.dbPath), { recursive: true });

@@ -48,8 +48,8 @@ export interface RiderPosition {
 /** Anteil der Distanz zum nächsten Checkpoint, ab dem die Extrapolation gekappt wird. */
 const CLAMP_FRACTION = 0.98;
 
-/** Letzter Rückfall, falls noch niemand im gesamten Feld eine verwertbare Geschwindigkeit geliefert hat (~25 km/h). */
-const DEFAULT_FALLBACK_SPEED_MPS = 6.94;
+/** Letzter Rückfall, falls noch niemand im gesamten Feld eine verwertbare Geschwindigkeit geliefert hat (~20 km/h). */
+const DEFAULT_FALLBACK_SPEED_MPS = 5.55;
 
 export interface ComputePositionsOptions {
   /** Überschreibt den globalen Rückfall-Wert (m/s), falls kein Kategorie-Median verfügbar ist. */
