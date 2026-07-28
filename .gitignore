@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+.env
+data/tiles-cache/
+data/simulation/
+data/*.db
+data/validation-report.json
+**/*.db
+**/*.db-wal
+**/*.db-shm

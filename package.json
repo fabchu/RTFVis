@@ -1,0 +1,20 @@
+{
+  "name": "rtfvis",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Visualisierung von Radfahrern auf einer Karte anhand von Checkpoint-Zeitstempeln aus Google Sheets.",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "test": "pnpm -r test",
+    "build:routes": "pnpm --filter @rtfvis/core build:routes",
+    "generate:example-data": "pnpm --filter @rtfvis/core generate:example-data",
+    "simulate:field": "pnpm --filter @rtfvis/core simulate:field",
+    "race": "node scripts/race.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "packageManager": "pnpm@11.17.0"
+}

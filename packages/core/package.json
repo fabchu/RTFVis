@@ -1,0 +1,25 @@
+{
+  "name": "@rtfvis/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build:routes": "tsx src/preprocess/cli-build-routes.ts",
+    "generate:example-data": "tsx src/preprocess/generate-example-data.ts",
+    "simulate:field": "tsx src/preprocess/simulate-field.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.5.1",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.4"
+  }
+}

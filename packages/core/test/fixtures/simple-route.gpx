@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test-fixture" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte>
+    <name>Simple Test Route (rtept fallback)</name>
+    <rtept lat="49.800000" lon="8.600000"></rtept>
+    <rtept lat="49.802000" lon="8.603000"></rtept>
+    <rtept lat="49.804000" lon="8.606000"></rtept>
+  </rte>
+</gpx>

@@ -1,0 +1,167 @@
+import type { Category, CheckpointDef, RiderPosition, Route } from "@rtfvis/core";
+
+export interface CheckpointPairOccupancy {
+  fromCheckpointId: string;
+  toCheckpointId: string;
+  /** Alle Strecken, die genau diesen Abschnitt (in dieser Reihenfolge) enthalten. */
+  routeIds: string[];
+  riderCount: number;
+}
+
+/**
+ * Zählt für jeden physischen Checkpoint-Abschnitt (from→to), unabhängig davon welche
+ * Strecke(n) ihn enthalten, wie viele Fahrer sich gerade dazwischen befinden. Ein von
+ * mehreren Strecken geteilter Abschnitt ist dadurch nur EIN Eintrag, nicht einer pro
+ * Strecke — und ein mehrdeutiger Fahrer wird dafür bewusst nur EINMAL gezählt (nicht pro
+ * Kandidatenstrecke), sonst würde er auf einem geteilten Abschnitt beim Zusammenfassen
+ * mehrfach gezählt.
+ *
+ * Nutzt bewusst nur die bereits vorhandenen lastCheckpointId/nextCheckpointId-Felder aus
+ * computePositions statt eigener Distanzvergleiche — bei "onCourse"/"overdue" ist
+ * nextCheckpointId immer der über ALLE Kandidatenstrecken geteilte nächste Checkpoint
+ * (siehe position.ts). Fahrer mit "ambiguousRoute" (echte Verzweigung erreicht,
+ * nextCheckpointId===null), "finished", "notStarted" oder "routeConflict" zählen bewusst
+ * nirgends mit — ihre Position zwischen zwei Checkpoints ist nicht (mehr) eindeutig
+ * bestimmbar.
+ */
+export function computeCheckpointPairOccupancy(positions: RiderPosition[], routes: Route[]): CheckpointPairOccupancy[] {
+  const routeIdsByPair = new Map<string, Set<string>>();
+  for (const route of routes) {
+    for (let i = 0; i < route.checkpoints.length - 1; i++) {
+      const key = pairKey(route.checkpoints[i].id, route.checkpoints[i + 1].id);
+      if (!routeIdsByPair.has(key)) routeIdsByPair.set(key, new Set());
+      routeIdsByPair.get(key)!.add(route.id);
+    }
+  }
+
+  const counts = new Map<string, number>();
+  for (const key of routeIdsByPair.keys()) counts.set(key, 0);
+
+  for (const position of positions) {
+    if (position.status !== "onCourse" && position.status !== "overdue") continue;
+    if (position.lastCheckpointId === null || position.nextCheckpointId === null) continue;
+    const key = pairKey(position.lastCheckpointId, position.nextCheckpointId);
+    const current = counts.get(key);
+    if (current !== undefined) counts.set(key, current + 1);
+  }
+
+  return Array.from(routeIdsByPair.entries()).map(([key, routeIdSet]) => {
+    const [fromCheckpointId, toCheckpointId] = key.split("::");
+    return {
+      fromCheckpointId,
+      toCheckpointId,
+      routeIds: Array.from(routeIdSet),
+      riderCount: counts.get(key)!,
+    };
+  });
+}
+
+function pairKey(fromId: string, toId: string): string {
+  return `${fromId}::${toId}`;
+}
+
+export interface NamedPairOccupancy {
+  fromName: string;
+  toName: string;
+  riderCount: number;
+  /**
+   * Einer der ursprünglichen Abschnitte dieser Gruppe (eigene Checkpoint-IDs + eigene
+   * Strecken-IDs) — als Anker für z.B. eine Geometrie-Positionierung, die IDs und Strecke
+   * konsistent zueinander braucht und nicht über mehrere Abschnitte hinweg gemischt werden darf.
+   */
+  representative: CheckpointPairOccupancy;
+}
+
+/**
+ * Fasst Abschnitte mit identischem Namenspaar zusammen (z.B. teilen sich START und FINISH bei
+ * Rundkursen denselben Namen "Start/Ziel", wodurch der reguläre Schlussabschnitt einer Strecke
+ * und der nur auf ihrer Sternfahrt-Variante existierende Rückweg-Abschnitt sonst als zwei
+ * ununterscheidbare, aber unterschiedlich gezählte Einträge auftauchen würden — auf der Karte
+ * sogar als zwei beinah deckungsgleiche Marker, von denen der "falsche" (z.B. grau mit 0
+ * Fahrern) den anderen verdeckt).
+ */
+export function groupCheckpointPairsByName(
+  pairs: CheckpointPairOccupancy[],
+  checkpointsById: Map<string, CheckpointDef>,
+): NamedPairOccupancy[] {
+  const checkpointName = (id: string) => checkpointsById.get(id)?.name ?? id;
+  const byName = new Map<string, NamedPairOccupancy>();
+  for (const pair of pairs) {
+    const fromName = checkpointName(pair.fromCheckpointId);
+    const toName = checkpointName(pair.toCheckpointId);
+    const key = `${fromName}::${toName}`;
+    const existing = byName.get(key);
+    if (existing) existing.riderCount += pair.riderCount;
+    else byName.set(key, { fromName, toName, riderCount: pair.riderCount, representative: pair });
+  }
+  return Array.from(byName.values()).sort(
+    (a, b) => a.fromName.localeCompare(b.fromName) || a.toName.localeCompare(b.toName),
+  );
+}
+
+export interface CategorySegmentGroup {
+  category: Category;
+  segments: NamedPairOccupancy[];
+}
+
+/**
+ * Fasst die nach Namen zusammengefassten Abschnitte zusätzlich nach Kategorie und sortiert
+ * sie innerhalb einer Kategorie in der Reihenfolge, in der sie auf der längsten (nicht
+ * Sternfahrt-)Strecke dieser Kategorie vorkommen. Die längste Strecke enthält typischerweise
+ * alle gemeinsamen Kontrollpunkte der Kategorie in der vollständigsten Reihenfolge — kürzere
+ * Strecken sind meist Teilabschnitte davon. Abschnitte, die dort nicht vorkommen (z.B. der nur
+ * auf einer Sternfahrt-Variante existierende Rückweg-Abschnitt), landen alphabetisch sortiert
+ * am Ende.
+ */
+export function groupNamedPairsByCategory(
+  pairs: CheckpointPairOccupancy[],
+  routesById: Map<string, Route>,
+  checkpointsById: Map<string, CheckpointDef>,
+): CategorySegmentGroup[] {
+  const named = groupCheckpointPairsByName(pairs, checkpointsById);
+
+  const byCategory = new Map<Category, NamedPairOccupancy[]>();
+  for (const group of named) {
+    const category = routesById.get(group.representative.routeIds[0])?.category;
+    if (!category) continue;
+    if (!byCategory.has(category)) byCategory.set(category, []);
+    byCategory.get(category)!.push(group);
+  }
+
+  const routesByCategory = new Map<Category, Route[]>();
+  for (const route of routesById.values()) {
+    if (route.baseRouteId) continue;
+    if (!routesByCategory.has(route.category)) routesByCategory.set(route.category, []);
+    routesByCategory.get(route.category)!.push(route);
+  }
+
+  const checkpointName = (id: string) => checkpointsById.get(id)?.name ?? id;
+
+  const result: CategorySegmentGroup[] = [];
+  for (const [category, segments] of byCategory) {
+    const routesOfCategory = routesByCategory.get(category) ?? [];
+    const longestRoute = routesOfCategory.reduce(
+      (longest, r) => (!longest || r.totalDistanceM > longest.totalDistanceM ? r : longest),
+      undefined as Route | undefined,
+    );
+
+    const orderIndex = new Map<string, number>();
+    if (longestRoute) {
+      for (let i = 0; i < longestRoute.checkpoints.length - 1; i++) {
+        const key = `${checkpointName(longestRoute.checkpoints[i].id)}::${checkpointName(longestRoute.checkpoints[i + 1].id)}`;
+        if (!orderIndex.has(key)) orderIndex.set(key, i);
+      }
+    }
+
+    const sorted = segments.slice().sort((a, b) => {
+      const aIndex = orderIndex.get(`${a.fromName}::${a.toName}`) ?? Number.POSITIVE_INFINITY;
+      const bIndex = orderIndex.get(`${b.fromName}::${b.toName}`) ?? Number.POSITIVE_INFINITY;
+      if (aIndex !== bIndex) return aIndex - bIndex;
+      return a.fromName.localeCompare(b.fromName) || a.toName.localeCompare(b.toName);
+    });
+
+    result.push({ category, segments: sorted });
+  }
+
+  return result.sort((a, b) => a.category.localeCompare(b.category));
+}
