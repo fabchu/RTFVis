@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { CheckpointDef } from "@rtfvis/core";
 import { loadConfig } from "./config.js";
 import { openDb } from "./db.js";
 import { startPolling } from "./poller.js";
@@ -25,8 +26,15 @@ const db = openDb(config.dbPath);
 const source = createSource(config);
 const pollStatus = new PollStatusTracker();
 
+// Nur beim Start geladen (ändert sich nicht während des Rennens, siehe server.ts) --
+// die IDs braucht der Poller, um ausgeschriebene Checkpoint-Bezeichnungen aus dem Sheet auf
+// unsere kurzen internen IDs zu mappen (siehe checkpointIdMapping.ts).
+const checkpointsPath = path.join(config.routesDataDir, "checkpoints.json");
+const validCheckpointIds = readCheckpointIds(checkpointsPath);
+
 startPolling(source, db, {
   intervalMs: config.pollIntervalMs,
+  validCheckpointIds,
   onPollSuccess: (result) => {
     pollStatus.recordSuccess();
     console.log(`[poll] ${result.insertedScans} neue Scans, Roster: ${result.rosterSize} Fahrer.`);
@@ -42,3 +50,12 @@ const server = buildServer(db, config, pollStatus);
 server.listen({ port: config.httpPort, host: "127.0.0.1" }).then(() => {
   console.log(`Server läuft auf http://127.0.0.1:${config.httpPort}`);
 });
+
+function readCheckpointIds(filePath: string): string[] {
+  try {
+    const checkpoints = JSON.parse(readFileSync(filePath, "utf-8")) as CheckpointDef[];
+    return checkpoints.map((c) => c.id);
+  } catch {
+    return [];
+  }
+}

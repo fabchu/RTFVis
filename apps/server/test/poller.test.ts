@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getRoster, openDb, type Db } from "../src/db.js";
+import { getAllScans, getRoster, openDb, type Db } from "../src/db.js";
 import { pollOnce, startPolling } from "../src/poller.js";
 import type { ScanSource } from "../src/sources/types.js";
+
+const TEST_CHECKPOINT_IDS = ["START", "K1", "K2", "K3/5", "K4", "FINISH"];
 
 let db: Db;
 
@@ -23,7 +25,7 @@ function mockSource(): ScanSource {
 describe("pollOnce", () => {
   it("fragt beim ersten Poll ohne since (kompletter Bestand)", async () => {
     const source = mockSource();
-    await pollOnce(source, db);
+    await pollOnce(source, db, TEST_CHECKPOINT_IDS);
     expect(source.fetchScansSince).toHaveBeenCalledWith(null);
   });
 
@@ -33,7 +35,7 @@ describe("pollOnce", () => {
       { startNumber: "101", checkpointId: "CP1", timestampUtc: "2026-07-25T09:00:00.000Z" },
     ]);
 
-    const result = await pollOnce(source, db);
+    const result = await pollOnce(source, db, TEST_CHECKPOINT_IDS);
     expect(result).toEqual({ insertedScans: 1, rosterSize: 1 });
   });
 
@@ -42,12 +44,34 @@ describe("pollOnce", () => {
     (source.fetchScansSince as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
       { startNumber: "101", checkpointId: "CP1", timestampUtc: "2026-07-25T09:30:00.000Z" },
     ]);
-    await pollOnce(source, db);
+    await pollOnce(source, db, TEST_CHECKPOINT_IDS);
 
     (source.fetchScansSince as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
-    await pollOnce(source, db);
+    await pollOnce(source, db, TEST_CHECKPOINT_IDS);
 
     expect(source.fetchScansSince).toHaveBeenNthCalledWith(2, "2026-07-25T09:15:00.000Z");
+  });
+
+  it("löst ausgeschriebene Checkpoint-Bezeichnungen im Sheet auf unsere kurze interne ID auf (echte Sheet-Beispiele)", async () => {
+    const source = mockSource();
+    (source.fetchScansSince as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { startNumber: "20", checkpointId: "K2 RTF Garbenteich", timestampUtc: "2026-07-29T11:07:19.000Z" },
+      { startNumber: "20", checkpointId: "K3/5 RTF Oberwetz", timestampUtc: "2026-07-29T11:07:33.000Z" },
+      { startNumber: "20", checkpointId: "K4 RTF Dornholzhausen", timestampUtc: "2026-07-29T11:07:42.000Z" },
+      // Leerzeichen mitten in der ID -- darf nicht an "K1" hängenbleiben.
+      { startNumber: "21", checkpointId: "K 7/8 CTF Bodenrod", timestampUtc: "2026-07-29T11:09:48.000Z" },
+      { startNumber: "21", checkpointId: "K 10 CTF Sportplatz Pohlgöns", timestampUtc: "2026-07-29T11:09:59.000Z" },
+      { startNumber: "22", checkpointId: "K11 Jedermann", timestampUtc: "2026-07-29T11:10:07.000Z" },
+    ]);
+
+    await pollOnce(
+      source,
+      db,
+      ["START", "K1", "K2", "K3/5", "K4", "K6/9", "K7/8", "K10", "K11", "FINISH"],
+    );
+
+    const scans = getAllScans(db);
+    expect(scans.map((s) => s.checkpointId)).toEqual(["K2", "K3/5", "K4", "K7/8", "K10", "K11"]);
   });
 
   it("löst Sheet-Streckenbezeichnungen im Roster vor dem Speichern in unsere interne Routen-ID auf", async () => {
@@ -57,7 +81,7 @@ describe("pollOnce", () => {
       { startNumber: "102", category: "CTF", routeId: "unbekannte Streckenbezeichnung" },
     ]);
 
-    await pollOnce(source, db);
+    await pollOnce(source, db, TEST_CHECKPOINT_IDS);
 
     const roster = getRoster(db);
     expect(roster.find((r) => r.startNumber === "101")?.routeId).toBe("rtf-49");
@@ -68,14 +92,14 @@ describe("pollOnce", () => {
     const source = mockSource();
     const scan = { startNumber: "101", checkpointId: "CP1", timestampUtc: "2026-07-25T09:30:00.000Z" };
     (source.fetchScansSince as ReturnType<typeof vi.fn>).mockResolvedValueOnce([scan]);
-    await pollOnce(source, db);
+    await pollOnce(source, db, TEST_CHECKPOINT_IDS);
 
     // Zweiter Poll liefert denselben Scan erneut (Überlappungsfenster) plus einen neuen.
     (source.fetchScansSince as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
       scan,
       { startNumber: "101", checkpointId: "CP2", timestampUtc: "2026-07-25T09:45:00.000Z" },
     ]);
-    const result = await pollOnce(source, db);
+    const result = await pollOnce(source, db, TEST_CHECKPOINT_IDS);
 
     expect(result.insertedScans).toBe(1);
   });
@@ -94,7 +118,7 @@ describe("startPolling", () => {
     const source = mockSource();
     const onPollSuccess = vi.fn();
 
-    const handle = startPolling(source, db, { intervalMs: 1000, onPollSuccess });
+    const handle = startPolling(source, db, { intervalMs: 1000, validCheckpointIds: TEST_CHECKPOINT_IDS, onPollSuccess });
 
     await vi.advanceTimersByTimeAsync(0);
     expect(onPollSuccess).toHaveBeenCalledTimes(1);
@@ -110,7 +134,7 @@ describe("startPolling", () => {
     (source.fetchRoster as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("Netzwerkfehler"));
     const onPollError = vi.fn();
 
-    const handle = startPolling(source, db, { intervalMs: 1000, maxBackoffMs: 10_000, onPollError });
+    const handle = startPolling(source, db, { intervalMs: 1000, validCheckpointIds: TEST_CHECKPOINT_IDS, maxBackoffMs: 10_000, onPollError });
 
     await vi.advanceTimersByTimeAsync(0);
     expect(onPollError).toHaveBeenCalledTimes(1);
@@ -127,7 +151,7 @@ describe("startPolling", () => {
   it("stoppt zukünftige Polls nach stop()", async () => {
     const source = mockSource();
     const onPollSuccess = vi.fn();
-    const handle = startPolling(source, db, { intervalMs: 1000, onPollSuccess });
+    const handle = startPolling(source, db, { intervalMs: 1000, validCheckpointIds: TEST_CHECKPOINT_IDS, onPollSuccess });
 
     await vi.advanceTimersByTimeAsync(0);
     handle.stop();

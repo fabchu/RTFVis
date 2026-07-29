@@ -1,3 +1,4 @@
+import { resolveCheckpointId } from "./checkpointIdMapping.js";
 import { getPollerState, insertScans, replaceRoster, setPollerState, type Db } from "./db.js";
 import { mapSheetRouteId } from "./routeNameMapping.js";
 import type { ScanSource } from "./sources/types.js";
@@ -18,7 +19,7 @@ export interface PollResult {
   rosterSize: number;
 }
 
-export async function pollOnce(source: ScanSource, db: Db): Promise<PollResult> {
+export async function pollOnce(source: ScanSource, db: Db, validCheckpointIds: readonly string[]): Promise<PollResult> {
   const rawRoster = await source.fetchRoster();
   const roster = rawRoster.map((entry) => ({ ...entry, routeId: mapSheetRouteId(entry.routeId) }));
   replaceRoster(db, roster);
@@ -27,7 +28,8 @@ export async function pollOnce(source: ScanSource, db: Db): Promise<PollResult> 
   const since =
     lastSeen === null ? null : new Date(new Date(lastSeen).getTime() - LATE_ARRIVAL_SAFETY_MARGIN_MS).toISOString();
 
-  const scans = await source.fetchScansSince(since);
+  const rawScans = await source.fetchScansSince(since);
+  const scans = rawScans.map((s) => ({ ...s, checkpointId: resolveCheckpointId(s.checkpointId, validCheckpointIds) }));
   const insertedScans = insertScans(db, scans);
 
   const newMax = scans.reduce<string | null>(
@@ -43,6 +45,7 @@ export async function pollOnce(source: ScanSource, db: Db): Promise<PollResult> 
 
 export interface PollerOptions {
   intervalMs: number;
+  validCheckpointIds: readonly string[];
   maxBackoffMs?: number;
   onPollError?: (error: unknown, consecutiveFailures: number) => void;
   onPollSuccess?: (result: PollResult) => void;
@@ -66,7 +69,7 @@ export function startPolling(source: ScanSource, db: Db, options: PollerOptions)
 
   const runOnce = async () => {
     try {
-      const result = await pollOnce(source, db);
+      const result = await pollOnce(source, db, options.validCheckpointIds);
       consecutiveFailures = 0;
       options.onPollSuccess?.(result);
       scheduleNext(options.intervalMs);
