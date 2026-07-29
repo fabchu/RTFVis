@@ -21,19 +21,37 @@
 
 // ---- Konfiguration: an das echte Sheet anpassen ----------------------------------
 
-const SCANS_SHEET_NAME = "Scans";
+// Enthält NUR die Kontrollen unterwegs -- Start und Ziel sind bewusst NICHT hier drin,
+// siehe readStartScans()/readFinishScans() unten.
+const SCANS_SHEET_NAME = "Kontrolle";
 const SCANS_COLUMNS = {
-  startNumber: "Startnummer",
-  checkpointId: "Checkpoint",
+  startNumber: "Bandnummer",
+  checkpointId: "Kontrolle",
   timestamp: "Zeitstempel",
 };
 
-const ROSTER_SHEET_NAME = "Teilnehmer";
+const ROSTER_SHEET_NAME = "TN Übersicht";
 const ROSTER_COLUMNS = {
-  startNumber: "Startnummer",
-  category: "Kategorie",
-  routeId: "Strecke", // optional, kann leer bleiben -> Fallback-Ableitung aus den Scans
+  startNumber: "Bandnummer",
+  category: "Disziplin",
+  routeId: "Streckenlänge", // optional, kann leer bleiben -> Fallback-Ableitung aus den Scans
+  // Der Start-Scan ist keine eigene Zeile in einem Scan-Sheet, sondern diese Spalte hier
+  // in der Teilnehmerübersicht -- sie wird erst befüllt, sobald der Fahrer tatsächlich
+  // gestartet ist. Siehe readStartScans() unten.
+  startTimestamp: "Zeitstempel",
 };
+
+// Eigenes Tabellenblatt für die Ziel-Ankunft ("wieder im Ziel"), enthält nur Zeitstempel
+// und Bandnummer -- siehe readFinishScans() unten.
+const FINISH_SHEET_NAME = "Zurück im Ziel";
+const FINISH_COLUMNS = {
+  startNumber: "Bandnummer",
+  timestamp: "Zeitstempel",
+};
+
+// Checkpoint-IDs für synthetisierte Start-/Ziel-Scans, siehe data/checkpoints.json.
+const START_CHECKPOINT_ID = "START";
+const FINISH_CHECKPOINT_ID = "FINISH";
 
 // -----------------------------------------------------------------------------------
 
@@ -74,18 +92,56 @@ function readRoster() {
     }));
 }
 
+/**
+ * Baut die vollständige Scan-Liste aus drei unterschiedlichen Quell-Sheets zusammen --
+ * unser Datenmodell (eine flache scans-Tabelle: Startnummer/Checkpoint/Zeitstempel) bleibt
+ * dabei unverändert, nur die Herkunft der einzelnen Zeilen unterscheidet sich:
+ *  1. Kontrollen unterwegs: eigene Zeile pro Scan im SCANS_SHEET_NAME-Blatt.
+ *  2. Start: keine eigene Zeile, sondern eine Spalte in der Teilnehmerübersicht.
+ *  3. Ziel: eigenes Blatt mit nur Zeitstempel + Bandnummer.
+ */
 function readScans(sinceIso) {
+  const scans = readCheckpointScans().concat(readStartScans(), readFinishScans());
+
+  if (!sinceIso) return scans;
+  return scans.filter((s) => s.timestampUtc > sinceIso);
+}
+
+function readCheckpointScans() {
   const rows = readSheetAsRecords(SCANS_SHEET_NAME);
-  const scans = rows
+  return rows
     .filter((r) => r[SCANS_COLUMNS.startNumber] && r[SCANS_COLUMNS.timestamp])
     .map((r) => ({
       startNumber: String(r[SCANS_COLUMNS.startNumber]),
       checkpointId: String(r[SCANS_COLUMNS.checkpointId]),
       timestampUtc: toIsoUtc(r[SCANS_COLUMNS.timestamp]),
     }));
+}
 
-  if (!sinceIso) return scans;
-  return scans.filter((s) => s.timestampUtc > sinceIso);
+/**
+ * Zeilen ohne befüllte Start-Zeitstempel-Spalte sind Teilnehmer, die schlicht noch nicht
+ * gestartet sind -- bewusst kein Scan für sie, nicht etwa ein Fehler.
+ */
+function readStartScans() {
+  const rows = readSheetAsRecords(ROSTER_SHEET_NAME);
+  return rows
+    .filter((r) => r[ROSTER_COLUMNS.startNumber] && r[ROSTER_COLUMNS.startTimestamp])
+    .map((r) => ({
+      startNumber: String(r[ROSTER_COLUMNS.startNumber]),
+      checkpointId: START_CHECKPOINT_ID,
+      timestampUtc: toIsoUtc(r[ROSTER_COLUMNS.startTimestamp]),
+    }));
+}
+
+function readFinishScans() {
+  const rows = readSheetAsRecords(FINISH_SHEET_NAME);
+  return rows
+    .filter((r) => r[FINISH_COLUMNS.startNumber] && r[FINISH_COLUMNS.timestamp])
+    .map((r) => ({
+      startNumber: String(r[FINISH_COLUMNS.startNumber]),
+      checkpointId: FINISH_CHECKPOINT_ID,
+      timestampUtc: toIsoUtc(r[FINISH_COLUMNS.timestamp]),
+    }));
 }
 
 /**

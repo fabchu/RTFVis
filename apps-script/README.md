@@ -4,7 +4,7 @@ Die Einrichtungsschritte stehen als Kommentar oben in [`Code.gs`](Code.gs). Kurz
 
 1. Google Sheet öffnen → **Erweiterungen → Apps Script** → Inhalt von `Code.gs` einfügen.
 2. **Projekteinstellungen → Skripteigenschaften** → `API_TOKEN` mit einem langen Zufallswert anlegen.
-3. Die Konstanten `SCANS_SHEET_NAME`, `SCANS_COLUMNS`, `ROSTER_SHEET_NAME`, `ROSTER_COLUMNS` oben in `Code.gs` an die echten Tabellenblatt- und Spaltennamen anpassen.
+3. Die Konstanten `SCANS_SHEET_NAME`, `SCANS_COLUMNS`, `ROSTER_SHEET_NAME`, `ROSTER_COLUMNS`, `FINISH_SHEET_NAME`, `FINISH_COLUMNS` oben in `Code.gs` an die echten Tabellenblatt- und Spaltennamen anpassen.
 4. **Bereitstellen → Neue Bereitstellung → Web-App**: Ausführen als „Ich", Zugriff „Jeder".
 5. Die bereitgestellte URL + das Token in `apps/server/.env` eintragen (siehe `.env.example`).
 
@@ -19,18 +19,37 @@ Erwartete Antwort: `{"ok":true,"data":[...]}`. Bei falschem Token: `{"ok":false,
 
 ## Erwartete Tabellenblätter
 
-**`Teilnehmer`** (oder wie in `ROSTER_COLUMNS` konfiguriert):
+Start und Ziel sind im echten Sheet KEINE Zeilen im Kontrollen-Scan-Blatt, sondern kommen
+aus zwei anderen Quellen — `readScans()` in `Code.gs` fügt alle drei zu einer flachen
+Scan-Liste zusammen, bevor sie den Server erreichen (unser Datenmodell bleibt dadurch
+unverändert: Startnummer/Checkpoint/Zeitstempel).
 
-| Startnummer | Kategorie | Strecke |
+**`TN Übersicht`** (Teilnehmerübersicht, Blatt- und Spaltennamen in `ROSTER_COLUMNS`):
+
+| Bandnummer | Disziplin | Streckenlänge | Zeitstempel |
+|---|---|---|---|
+| 101 | RTF | RTF - 49 km | 2026-07-25 08:03:12 |
+
+`Streckenlänge` darf leer bleiben — dann übernimmt später die Ableitung aus den Scans
+(Phase 3). Die Werte werden zusätzlich serverseitig über `routeNameMapping.ts` auf unsere
+internen Routen-IDs gemappt, da das Sheet Klartext-Bezeichnungen statt unserer IDs enthält.
+
+`Zeitstempel` hier ist der **Start-Scan**: die Spalte wird erst befüllt, sobald der
+Fahrer tatsächlich gestartet ist. Leer = noch nicht gestartet, kein Fehler — dafür gibt es
+in dieser Zeile schlicht (noch) keinen synthetisierten Start-Scan.
+
+**`Kontrolle`** — nur die Kontrollen unterwegs, NICHT Start oder Ziel:
+
+| Bandnummer | Kontrolle | Zeitstempel |
 |---|---|---|
-| 101 | RTF | rtf-90 |
+| 101 | K1 | 2026-07-25 09:14:32 |
 
-`Strecke` darf leer bleiben — dann übernimmt später die Ableitung aus den Scans (Phase 3).
+**`Zurück im Ziel`** — eigenes Blatt für die Ziel-Ankunft:
 
-**`Scans`**:
+| Bandnummer | Zeitstempel |
+|---|---|
+| 101 | 2026-07-25 14:02:47 |
 
-| Startnummer | Checkpoint | Zeitstempel |
-|---|---|---|
-| 101 | CP1 | 2026-07-25 09:14:32 |
-
-Die Spalte `Zeitstempel` sollte idealerweise ein echter Datums-Typ sein (z.B. automatisch von einem verlinkten Google-Formular befüllt) — dann ist die Zeitzonen-Umrechnung immer korrekt, unabhängig von der Anzeige-Zeitzone des Sheets.
+Die jeweilige `Zeitstempel`-Spalte sollte idealerweise ein echter Datums-Typ sein (z.B.
+automatisch von einem verlinkten Google-Formular befüllt) — dann ist die
+Zeitzonen-Umrechnung immer korrekt, unabhängig von der Anzeige-Zeitzone des Sheets.
