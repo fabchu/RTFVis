@@ -5,6 +5,7 @@ import { computeReplayBounds } from "./clock.js";
 import { DEFAULT_FILTERS, filterPositions, routeMatchesFilters } from "./filters.js";
 import { MapView } from "./map/MapView.js";
 import { MapLayerToggles } from "./MapLayerToggles.js";
+import { RankingModal } from "./RankingModal.js";
 import { SafetyOverviewModal } from "./SafetyOverviewModal.js";
 import { computeCheckpointPairOccupancy } from "./segmentOccupancy.js";
 import { OrgaPanel } from "./sidebar/OrgaPanel.js";
@@ -29,6 +30,7 @@ export function App() {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [selectedStartNumber, setSelectedStartNumber] = useState<string | null>(null);
   const [safetyOverviewOpen, setSafetyOverviewOpen] = useState(false);
+  const [rankingOpen, setRankingOpen] = useState(false);
   const [showRiders, setShowRiders] = useState(true);
   const [showSegments, setShowSegments] = useState(true);
 
@@ -136,6 +138,22 @@ export function App() {
         />
 
         <OrgaPanel positions={positions} onOpen={() => setSafetyOverviewOpen(true)} />
+
+        <button className="ranking-panel-button" onClick={() => setRankingOpen(true)}>
+          Rangliste
+        </button>
+
+        {rankingOpen && (
+          <RankingModal
+            roster={roster}
+            scans={scans}
+            routes={routes}
+            nowMs={clock.nowMs}
+            selectedStartNumber={selectedStartNumber}
+            onSelectRider={setSelectedStartNumber}
+            onClose={() => setRankingOpen(false)}
+          />
+        )}
 
         {safetyOverviewOpen && (
           <SafetyOverviewModal
