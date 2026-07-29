@@ -47,8 +47,8 @@ startPolling(source, db, {
 });
 
 const server = buildServer(db, config, pollStatus);
-server.listen({ port: config.httpPort, host: "127.0.0.1" }).then(() => {
-  console.log(`Server läuft auf http://127.0.0.1:${config.httpPort}`);
+server.listen({ port: config.httpPort, host: config.host }).then(() => {
+  console.log(`Server läuft auf http://${config.host}:${config.httpPort}`);
 });
 
 function readCheckpointIds(filePath: string): string[] {

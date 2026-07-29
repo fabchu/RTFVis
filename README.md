@@ -76,6 +76,32 @@ pnpm --filter @rtfvis/web dev
 pnpm test
 ```
 
+## Deployment für eine kleine Gruppe (Internet-Zugriff)
+
+Standardmäßig läuft der Server nur lokal (`HOST=127.0.0.1`). Für Zugriff über das Internet
+durch eine kleine, feste Gruppe eignet sich z.B. [Render.com](https://render.com)
+(kostenloser Web-Service-Tier) — das Repo enthält dafür ein Blueprint
+([`render.yaml`](render.yaml)):
+
+1. Auf Render: **New → Blueprint** → dieses Repo verbinden. Render liest `render.yaml` und
+   legt den Service mit den richtigen Build-/Start-Befehlen an.
+2. Im Dashboard unter **Environment** die als `sync: false` markierten Variablen befüllen:
+   `APPS_SCRIPT_URL`, `APPS_SCRIPT_TOKEN` (siehe Schritt 3 oben), sowie `BASIC_AUTH_USER` +
+   `BASIC_AUTH_PASS` — ein gemeinsames Passwort für die ganze Gruppe (beide leer lassen für
+   offenen Zugriff, aber dann ist die Seite für jeden mit der URL sichtbar).
+3. Deployen. Backend und Frontend laufen dabei als **ein** Service — das Frontend wird als
+   Produktions-Build vom Backend mit ausgeliefert (`pnpm --filter @rtfvis/web build` im
+   `buildCommand`), kein separates Hosting nötig.
+
+Der lokale Betrieb (`pnpm race`) bleibt davon komplett unberührt — beide Varianten laufen
+über dieselbe Codebasis, nur über unterschiedliche Umgebungsvariablen gesteuert
+(`HOST`, `BASIC_AUTH_USER`/`BASIC_AUTH_PASS`, siehe `apps/server/.env.example`).
+
+**Wichtig:** Die SQLite-Datenbank liegt auf dem Render-Free-Tier auf einem flüchtigen
+Dateisystem (Neustart/Redeploy = Datenbank leer). Das ist unkritisch, weil das Google Sheet
+ohnehin die eigentliche Datenquelle ist — der Server holt beim nächsten Poll einfach die
+komplette Historie neu.
+
 ## Renntag-Checkliste
 
 **Vorbereitung (Tage vorher):**

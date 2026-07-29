@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -19,7 +19,13 @@ beforeEach(() => {
   pollStatus = new PollStatusTracker();
   app = buildServer(
     db,
-    { routesDataDir: dataDir, tileCacheDir: path.join(dataDir, "tiles-cache"), dataSource: "csv", pollIntervalMs: 30_000 },
+    {
+      routesDataDir: dataDir,
+      tileCacheDir: path.join(dataDir, "tiles-cache"),
+      webDistDir: path.join(dataDir, "web-dist"), // existiert bewusst nicht -> Static-Serving bleibt aus
+      dataSource: "csv",
+      pollIntervalMs: 30_000,
+    },
     pollStatus,
   );
 });
@@ -91,5 +97,92 @@ describe("GET /tiles/:z/:x/:y.png", () => {
   it("lehnt ungültige Kachel-Koordinaten mit 400 ab", async () => {
     const res = await app.inject({ method: "GET", url: "/tiles/abc/1/2.png" });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+describe("Basic Auth", () => {
+  function basicAuthHeader(user: string, pass: string): string {
+    return "Basic " + Buffer.from(`${user}:${pass}`).toString("base64");
+  }
+
+  it("ist standardmäßig aus -- kein basicAuth in der Config bedeutet offener Zugriff", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/roster" });
+    expect(res.statusCode).toBe(200);
+  });
+
+  describe("wenn konfiguriert", () => {
+    let authApp: ReturnType<typeof buildServer>;
+
+    beforeEach(() => {
+      authApp = buildServer(
+        db,
+        {
+          routesDataDir: dataDir,
+          tileCacheDir: path.join(dataDir, "tiles-cache"),
+          webDistDir: path.join(dataDir, "web-dist"),
+          dataSource: "csv",
+          pollIntervalMs: 30_000,
+          basicAuth: { user: "orga", pass: "geheim" },
+        },
+        pollStatus,
+      );
+    });
+
+    it("lehnt Anfragen ohne Authorization-Header mit 401 ab", async () => {
+      const res = await authApp.inject({ method: "GET", url: "/api/roster" });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("lehnt falsche Zugangsdaten mit 401 ab", async () => {
+      const res = await authApp.inject({
+        method: "GET",
+        url: "/api/roster",
+        headers: { authorization: basicAuthHeader("orga", "falsch") },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("lässt korrekte Zugangsdaten durch", async () => {
+      const res = await authApp.inject({
+        method: "GET",
+        url: "/api/roster",
+        headers: { authorization: basicAuthHeader("orga", "geheim") },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it("lässt /health ohne Zugangsdaten durch (Hosting-Health-Checks schicken keine Auth)", async () => {
+      const res = await authApp.inject({ method: "GET", url: "/health" });
+      expect(res.statusCode).toBe(200);
+    });
+  });
+});
+
+describe("Statisches Frontend-Ausliefern", () => {
+  it("bleibt ohne vorhandenes webDistDir wirkungslos (lokaler Dev-Betrieb mit separatem Vite-Server)", async () => {
+    const res = await app.inject({ method: "GET", url: "/" });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("liefert index.html aus, wenn webDistDir existiert (z.B. Produktions-Build fürs Hosting)", async () => {
+    const webDistDir = path.join(dataDir, "web-dist-existing");
+    mkdirSync(webDistDir, { recursive: true });
+    writeFileSync(path.join(webDistDir, "index.html"), "<!doctype html><title>RTFVis</title>", "utf-8");
+
+    const staticApp = buildServer(
+      db,
+      {
+        routesDataDir: dataDir,
+        tileCacheDir: path.join(dataDir, "tiles-cache"),
+        webDistDir,
+        dataSource: "csv",
+        pollIntervalMs: 30_000,
+      },
+      pollStatus,
+    );
+
+    const res = await staticApp.inject({ method: "GET", url: "/" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("RTFVis");
   });
 });

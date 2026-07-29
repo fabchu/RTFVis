@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: rtfvis
+    runtime: node
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm build:routes && pnpm --filter @rtfvis/web build
+    startCommand: pnpm --filter @rtfvis/server start
+    healthCheckPath: /health
+    envVars:
+      - key: DATA_SOURCE
+        value: apps-script
+      - key: APPS_SCRIPT_URL
+        sync: false
+      - key: APPS_SCRIPT_TOKEN
+        sync: false
+      - key: HOST
+        value: 0.0.0.0
+      - key: BASIC_AUTH_USER
+        sync: false
+      - key: BASIC_AUTH_PASS
+        sync: false

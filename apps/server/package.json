@@ -14,6 +14,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fastify/static": "^10.1.2",
     "@rtfvis/core": "workspace:*",
     "fastify": "^5.1.0",
     "luxon": "^3.5.0"
