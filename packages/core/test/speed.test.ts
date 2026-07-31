@@ -37,14 +37,14 @@ describe("estimateSpeed", () => {
       scan("START", "2026-07-25T07:00:00Z"), // zusätzlicher, sehr langsamer Abschnitt davor (10km/3600s)
       scan("CP1", "2026-07-25T08:00:00Z"),
       scan("CP2", "2026-07-25T08:16:40Z"), // +1000s, 10 m/s
-      scan("CP3", "2026-07-25T08:25:00Z"), // +500s, 30 m/s
-      scan("FINISH_LONG", "2026-07-25T08:35:00Z"), // +600s, 25 m/s
+      scan("CP3", "2026-07-25T08:33:20Z"), // +1000s, 15 m/s
+      scan("FINISH_LONG", "2026-07-25T08:50:00Z"), // +1000s, 15 m/s
     ];
     const withoutExtra = [
       scan("CP1", "2026-07-25T08:00:00Z"),
       scan("CP2", "2026-07-25T08:16:40Z"),
-      scan("CP3", "2026-07-25T08:25:00Z"),
-      scan("FINISH_LONG", "2026-07-25T08:35:00Z"),
+      scan("CP3", "2026-07-25T08:33:20Z"),
+      scan("FINISH_LONG", "2026-07-25T08:50:00Z"),
     ];
     // withExtra hat 4 Abschnitte (START-CP1 zusätzlich), withoutExtra nur die letzten 3
     // davon — das Ergebnis muss identisch sein, der zusätzliche frühere Abschnitt darf
@@ -58,6 +58,35 @@ describe("estimateSpeed", () => {
       scan("START", "2026-07-25T08:00:00Z"), // liegt VOR CP1 zeitlich, aber Distanz davor -> negative dDist
     ];
     expect(estimateSpeed(scans, rtfShort)).toBeNull();
+  });
+
+  it("ignoriert einen unplausibel schnellen Ausreißer-Abschnitt, statt ihn einzurechnen (Regression)", () => {
+    // Realer Fall: zwei Kontrollen binnen 12s eingetragen, angeblich 10km dazwischen ->
+    // ~833 m/s. Ohne Plausibilitätsgrenze hätte dieser eine Abschnitt (Gewicht 0.3) die
+    // komplette Tempo-Schätzung (und darauf basierend die erwartete Ankunftszeit) auf ein
+    // Vielfaches der echten Geschwindigkeit hochgezogen.
+    const scans = [
+      scan("START", "2026-07-25T08:00:00Z"),
+      scan("CP1", "2026-07-25T08:16:40Z"), // +1000s -> 10 m/s, plausibel
+      scan("CP2", "2026-07-25T08:16:52Z"), // +12s, 10km -> ~833 m/s, unplausibel
+    ];
+    // Nur der plausible Abschnitt (10 m/s) darf einfließen.
+    expect(estimateSpeed(scans, rtfShort)).toBeCloseTo(10, 5);
+  });
+
+  it("gibt null zurück, wenn ALLE Abschnitte unplausibel schnell sind", () => {
+    const scans = [
+      scan("START", "2026-07-25T08:00:00Z"),
+      scan("CP1", "2026-07-25T08:00:05Z"), // +5s, 10km -> unplausibel
+    ];
+    expect(estimateSpeed(scans, rtfShort)).toBeNull();
+  });
+
+  it("lässt einen echten schnellen (aber plausiblen) Abschnitt unangetastet", () => {
+    // 10km in 550s ≈ 18.2 m/s (~65.5 km/h) -- unter der Plausibilitätsgrenze, z.B. ein
+    // schneller Downhill-Abschnitt.
+    const scans = [scan("START", "2026-07-25T08:00:00Z"), scan("CP1", "2026-07-25T08:09:10Z")];
+    expect(estimateSpeed(scans, rtfShort)).toBeCloseTo(10_000 / 550, 5);
   });
 
   it("ignoriert Checkpoints, die nicht zur übergebenen Strecke gehören", () => {
