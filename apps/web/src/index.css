@@ -224,6 +224,11 @@ body {
   flex-shrink: 0;
 }
 
+.segment-occupancy-unclear {
+  font-weight: 600;
+  color: #f59e0b;
+}
+
 .category-summary {
   width: 100%;
   border-collapse: collapse;

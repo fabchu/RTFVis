@@ -98,26 +98,31 @@ describe("checkpointPairOccupancyToGeoJSON", () => {
 
   it("platziert den Marker auf halber Strecke ENTLANG DER STRECKENGEOMETRIE, nicht als Luftlinie zwischen den Checkpoint-Koordinaten", () => {
     const pairs: CheckpointPairOccupancy[] = [
-      { fromCheckpointId: "CP1", toCheckpointId: "CP2", routeIds: ["rtf-90"], riderCount: 3 },
+      { fromCheckpointId: "CP1", toCheckpointId: "CP2", routeIds: ["rtf-90"], riderCount: 3, unclearCount: 0 },
     ];
     const fc = checkpointPairOccupancyToGeoJSON(pairs, routesById, checkpointsById);
     expect(fc.features[0].geometry.type).toBe("Point");
     const [lon, lat] = (fc.features[0].geometry as GeoJSON.Point).coordinates;
     expect(lon).toBeCloseTo(8.65, 10);
     expect(lat).toBeCloseTo(49.85, 10);
-    expect(fc.features[0].properties).toEqual({ fromCheckpointId: "CP1", toCheckpointId: "CP2", riderCount: 3 });
+    expect(fc.features[0].properties).toEqual({
+      fromCheckpointId: "CP1",
+      toCheckpointId: "CP2",
+      riderCount: 3,
+      unclearCount: 0,
+    });
   });
 
   it("überspringt Paare, deren referenzierte Strecke nicht bekannt ist", () => {
     const pairs: CheckpointPairOccupancy[] = [
-      { fromCheckpointId: "CP1", toCheckpointId: "CP2", routeIds: ["unbekannte-strecke"], riderCount: 1 },
+      { fromCheckpointId: "CP1", toCheckpointId: "CP2", routeIds: ["unbekannte-strecke"], riderCount: 1, unclearCount: 0 },
     ];
     expect(checkpointPairOccupancyToGeoJSON(pairs, routesById, checkpointsById).features).toHaveLength(0);
   });
 
   it("überspringt Paare, deren Checkpoint-Abschnitt nicht (mehr) in der Strecke vorkommt", () => {
     const pairs: CheckpointPairOccupancy[] = [
-      { fromCheckpointId: "CP1", toCheckpointId: "UNBEKANNT", routeIds: ["rtf-90"], riderCount: 1 },
+      { fromCheckpointId: "CP1", toCheckpointId: "UNBEKANNT", routeIds: ["rtf-90"], riderCount: 1, unclearCount: 0 },
     ];
     expect(checkpointPairOccupancyToGeoJSON(pairs, routesById, checkpointsById).features).toHaveLength(0);
   });
@@ -133,8 +138,8 @@ describe("checkpointPairOccupancyToGeoJSON", () => {
       ["CP2_VARIANT", { id: "CP2_VARIANT", name: "Start/Ziel", lat: 0, lon: 0 }],
     ]);
     const pairs: CheckpointPairOccupancy[] = [
-      { fromCheckpointId: "CP1", toCheckpointId: "CP2", routeIds: ["rtf-90"], riderCount: 15 },
-      { fromCheckpointId: "CP1", toCheckpointId: "CP2_VARIANT", routeIds: ["rtf-90-sternfahrt"], riderCount: 0 },
+      { fromCheckpointId: "CP1", toCheckpointId: "CP2", routeIds: ["rtf-90"], riderCount: 15, unclearCount: 0 },
+      { fromCheckpointId: "CP1", toCheckpointId: "CP2_VARIANT", routeIds: ["rtf-90-sternfahrt"], riderCount: 0, unclearCount: 0 },
     ];
     const fc = checkpointPairOccupancyToGeoJSON(pairs, routesById, namedCheckpointsById);
     expect(fc.features).toHaveLength(1);

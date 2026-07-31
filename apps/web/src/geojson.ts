@@ -70,6 +70,7 @@ export interface CheckpointPairOccupancyProperties {
   fromCheckpointId: string;
   toCheckpointId: string;
   riderCount: number;
+  unclearCount: number;
 }
 
 /**
@@ -109,6 +110,7 @@ export function checkpointPairOccupancyToGeoJSON(
         fromCheckpointId: representative.fromCheckpointId,
         toCheckpointId: representative.toCheckpointId,
         riderCount: group.riderCount,
+        unclearCount: group.unclearCount,
       },
     });
   }

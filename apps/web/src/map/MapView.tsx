@@ -176,7 +176,19 @@ export function MapView({
         source: SEGMENT_OCCUPANCY_SOURCE,
         paint: {
           "circle-radius": 11,
-          "circle-color": ["case", [">", ["get", "riderCount"], 0], "#7c3aed", "#d1d5db"],
+          // Lila = mind. ein eindeutig bestätigter Fahrer unterwegs. Gelb = niemand eindeutig
+          // bestätigt, aber mind. ein Fahrer mit unklarer Streckenzuordnung könnte theoretisch
+          // noch kommen (siehe unclearCount in segmentOccupancy.ts) -- bewusst NICHT grau wie
+          // "sicher niemand mehr", sonst würde ein Streckenposten das fälschlich als "alles
+          // klar, kann abbauen" lesen.
+          "circle-color": [
+            "case",
+            [">", ["get", "riderCount"], 0],
+            "#7c3aed",
+            [">", ["get", "unclearCount"], 0],
+            "#f59e0b",
+            "#d1d5db",
+          ],
           "circle-opacity": 0.9,
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1.5,
@@ -187,7 +199,12 @@ export function MapView({
         type: "symbol",
         source: SEGMENT_OCCUPANCY_SOURCE,
         layout: {
-          "text-field": ["to-string", ["get", "riderCount"]],
+          "text-field": [
+            "case",
+            [">", ["get", "unclearCount"], 0],
+            ["concat", ["to-string", ["get", "riderCount"]], "+", ["to-string", ["get", "unclearCount"]]],
+            ["to-string", ["get", "riderCount"]],
+          ],
           "text-size": 11,
         },
         paint: { "text-color": "#ffffff" },

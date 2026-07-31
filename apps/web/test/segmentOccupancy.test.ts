@@ -113,7 +113,7 @@ describe("computeCheckpointPairOccupancy", () => {
     expect(result.find((p) => p.toCheckpointId === "CP3")?.riderCount).toBe(1);
   });
 
-  it("zählt notStarted, finished, routeConflict und ambiguousRoute nirgends mit", () => {
+  it("zählt notStarted, finished, routeConflict und ambiguousRoute nicht in riderCount", () => {
     const positions = [
       position({ status: "notStarted", lastCheckpointId: null, nextCheckpointId: null }),
       position({ status: "finished", nextCheckpointId: null }),
@@ -131,6 +131,77 @@ describe("computeCheckpointPairOccupancy", () => {
   });
 });
 
+describe("computeCheckpointPairOccupancy: unclearCount", () => {
+  it("zählt einen ambiguousRoute-Fahrer als unclearCount auf JEDEM Abschnitt, den eine seiner Kandidatenstrecken ab dem letzten Checkpoint noch nehmen könnte", () => {
+    // rtf-short und rtf-long teilen sich CP1, laufen danach beide über CP2 weiter -> nur
+    // EIN möglicher nächster Abschnitt (CP1->CP2), obwohl zwei Kandidatenstrecken.
+    const ambiguous = position({
+      status: "ambiguousRoute",
+      routeId: null,
+      candidateRouteIds: ["rtf-short", "rtf-long"],
+      lastCheckpointId: "CP1",
+      nextCheckpointId: null,
+    });
+    const result = computeCheckpointPairOccupancy([ambiguous], routes);
+    const pair = result.find((p) => p.fromCheckpointId === "CP1" && p.toCheckpointId === "CP2");
+    expect(pair?.unclearCount).toBe(1);
+    expect(pair?.riderCount).toBe(0);
+    expect(result.filter((p) => p.unclearCount > 0)).toHaveLength(1);
+  });
+
+  it("zählt einen ambiguousRoute-Fahrer auf ECHT unterschiedlichen möglichen Abschnitten mehrfach (verschiedene Segmente, nicht derselbe Fahrer doppelt)", () => {
+    // Ab CP2 divergieren rtf-short (-> FINISH_SHORT) und rtf-long (-> CP3) tatsächlich.
+    const ambiguous = position({
+      status: "ambiguousRoute",
+      routeId: null,
+      candidateRouteIds: ["rtf-short", "rtf-long"],
+      lastCheckpointId: "CP2",
+      nextCheckpointId: null,
+    });
+    const result = computeCheckpointPairOccupancy([ambiguous], routes);
+    expect(result.find((p) => p.fromCheckpointId === "CP2" && p.toCheckpointId === "FINISH_SHORT")?.unclearCount).toBe(1);
+    expect(result.find((p) => p.fromCheckpointId === "CP2" && p.toCheckpointId === "CP3")?.unclearCount).toBe(1);
+    expect(result.filter((p) => p.unclearCount > 0)).toHaveLength(2);
+  });
+
+  it("zählt einen routeConflict-Fahrer (Route komplett unbekannt) auf allen Abschnitten seiner Kategorie ab dem letzten bekannten Checkpoint", () => {
+    const conflicted = position({
+      status: "routeConflict",
+      routeId: null,
+      candidateRouteIds: [],
+      category: "RTF",
+      lastCheckpointId: "CP1",
+      nextCheckpointId: null,
+    });
+    const result = computeCheckpointPairOccupancy([conflicted], routes);
+    const pair = result.find((p) => p.fromCheckpointId === "CP1" && p.toCheckpointId === "CP2");
+    expect(pair?.unclearCount).toBe(1);
+    expect(pair?.riderCount).toBe(0);
+  });
+
+  it("routeConflict ohne bekannte Kategorie trägt zu keinem Abschnitt unclearCount bei (keine Grundlage für eine Vermutung)", () => {
+    const conflicted = position({
+      status: "routeConflict",
+      routeId: null,
+      candidateRouteIds: [],
+      category: null,
+      lastCheckpointId: "CP1",
+      nextCheckpointId: null,
+    });
+    const result = computeCheckpointPairOccupancy([conflicted], routes);
+    expect(result.every((p) => p.unclearCount === 0)).toBe(true);
+  });
+
+  it("notStarted und finished tragen nicht zu unclearCount bei", () => {
+    const positions = [
+      position({ status: "notStarted", lastCheckpointId: null, nextCheckpointId: null }),
+      position({ status: "finished", nextCheckpointId: null }),
+    ];
+    const result = computeCheckpointPairOccupancy(positions, routes);
+    expect(result.every((p) => p.unclearCount === 0)).toBe(true);
+  });
+});
+
 describe("groupCheckpointPairsByName", () => {
   const checkpointsById = new Map<string, CheckpointDef>([
     ["START", { id: "START", name: "Start/Ziel", lat: 0, lon: 0 }],
@@ -139,7 +210,7 @@ describe("groupCheckpointPairsByName", () => {
   ]);
 
   function pair(overrides: Partial<CheckpointPairOccupancy>): CheckpointPairOccupancy {
-    return { fromCheckpointId: "K1", toCheckpointId: "FINISH", routeIds: ["rtf-90"], riderCount: 0, ...overrides };
+    return { fromCheckpointId: "K1", toCheckpointId: "FINISH", routeIds: ["rtf-90"], riderCount: 0, unclearCount: 0, ...overrides };
   }
 
   it("fasst Abschnitte mit identischem Namenspaar zusammen (z.B. START und FINISH heißen beide 'Start/Ziel')", () => {
@@ -147,6 +218,15 @@ describe("groupCheckpointPairsByName", () => {
     const result = groupCheckpointPairsByName(pairs, checkpointsById);
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ fromName: "Villingen", toName: "Start/Ziel", riderCount: 10 });
+  });
+
+  it("summiert unclearCount genauso wie riderCount über zusammengefasste Abschnitte hinweg", () => {
+    const pairs = [
+      pair({ toCheckpointId: "FINISH", unclearCount: 2 }),
+      pair({ toCheckpointId: "START", unclearCount: 5 }),
+    ];
+    const result = groupCheckpointPairsByName(pairs, checkpointsById);
+    expect(result[0].unclearCount).toBe(7);
   });
 
   it("nutzt den ZUERST gesehenen Abschnitt als Repräsentant (eigene IDs bleiben zusammengehörig, werden nie gemischt)", () => {

@@ -126,8 +126,20 @@ const checkpoints: CheckpointDef[] = [
   { id: "C1", name: "Hausberg", lat: 49.9, lon: 8.5 },
 ];
 
-const rtfPair: CheckpointPairOccupancy = { fromCheckpointId: "START", toCheckpointId: "K1", routeIds: ["rtf-90"], riderCount: 5 };
-const ctfPair: CheckpointPairOccupancy = { fromCheckpointId: "START", toCheckpointId: "C1", routeIds: ["ctf-70"], riderCount: 3 };
+const rtfPair: CheckpointPairOccupancy = {
+  fromCheckpointId: "START",
+  toCheckpointId: "K1",
+  routeIds: ["rtf-90"],
+  riderCount: 5,
+  unclearCount: 0,
+};
+const ctfPair: CheckpointPairOccupancy = {
+  fromCheckpointId: "START",
+  toCheckpointId: "C1",
+  routeIds: ["ctf-70"],
+  riderCount: 3,
+  unclearCount: 0,
+};
 
 function noop() {}
 

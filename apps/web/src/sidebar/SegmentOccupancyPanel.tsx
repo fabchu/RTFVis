@@ -26,7 +26,15 @@ export function SegmentOccupancyPanel({ pairs, routesById, checkpointsById }: Se
                   {" → "}
                   {pair.toName}
                 </span>
-                <span className="segment-occupancy-count">{pair.riderCount}</span>
+                <span className="segment-occupancy-count">
+                  {pair.riderCount}
+                  {pair.unclearCount > 0 && (
+                    <span className="segment-occupancy-unclear" title="Fahrer mit unklarer Streckenzuordnung, die theoretisch hier sein könnten">
+                      {" "}
+                      +{pair.unclearCount} unklar
+                    </span>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

@@ -6,6 +6,13 @@ export interface CheckpointPairOccupancy {
   /** Alle Strecken, die genau diesen Abschnitt (in dieser Reihenfolge) enthalten. */
   routeIds: string[];
   riderCount: number;
+  /**
+   * Fahrer mit unklarer Streckenzuordnung (ambiguousRoute/routeConflict), die THEORETISCH auf
+   * diesem Abschnitt sein könnten -- grobe Schätzung, keine exakte Zuordnung (siehe
+   * computeCheckpointPairOccupancy). Bewusst getrennt von riderCount, damit dieser weiterhin
+   * ein eindeutiger, verlässlicher Wert bleibt.
+   */
+  unclearCount: number;
 }
 
 /**
@@ -20,29 +27,81 @@ export interface CheckpointPairOccupancy {
  * computePositions statt eigener Distanzvergleiche — bei "onCourse"/"overdue" ist
  * nextCheckpointId immer der über ALLE Kandidatenstrecken geteilte nächste Checkpoint
  * (siehe position.ts). Fahrer mit "ambiguousRoute" (echte Verzweigung erreicht,
- * nextCheckpointId===null), "finished", "notStarted" oder "routeConflict" zählen bewusst
- * nirgends mit — ihre Position zwischen zwei Checkpoints ist nicht (mehr) eindeutig
- * bestimmbar.
+ * nextCheckpointId===null) oder "routeConflict" zählen NICHT in riderCount -- ihre Position
+ * zwischen zwei Checkpoints ist nicht eindeutig bestimmbar -- landen aber in unclearCount auf
+ * jedem Abschnitt, den sie ab ihrem letzten bekannten Checkpoint theoretisch noch erreichen
+ * könnten (siehe unten). Sonst würde ein Streckenposten bei "0 Fahrer unterwegs" fälschlich
+ * annehmen können, dass niemand mehr kommt, obwohl da noch ein Fahrer mit unklarer Zuordnung
+ * unterwegs sein könnte. "finished" und "notStarted" zählen weiterhin nirgends mit.
  */
 export function computeCheckpointPairOccupancy(positions: RiderPosition[], routes: Route[]): CheckpointPairOccupancy[] {
   const routeIdsByPair = new Map<string, Set<string>>();
+  // Je Strecke: Checkpoint-ID -> Menge der direkt folgenden Checkpoint-IDs (an JEDER Position,
+  // falls die Strecke denselben Checkpoint mehrfach besucht) -- Grundlage für unclearCount.
+  const nextIdsByRoute = new Map<string, Map<string, Set<string>>>();
   for (const route of routes) {
+    const nextIds = new Map<string, Set<string>>();
     for (let i = 0; i < route.checkpoints.length - 1; i++) {
-      const key = pairKey(route.checkpoints[i].id, route.checkpoints[i + 1].id);
+      const fromId = route.checkpoints[i].id;
+      const toId = route.checkpoints[i + 1].id;
+      const key = pairKey(fromId, toId);
       if (!routeIdsByPair.has(key)) routeIdsByPair.set(key, new Set());
       routeIdsByPair.get(key)!.add(route.id);
+
+      if (!nextIds.has(fromId)) nextIds.set(fromId, new Set());
+      nextIds.get(fromId)!.add(toId);
     }
+    nextIdsByRoute.set(route.id, nextIds);
+  }
+
+  // Für routeConflict (Route komplett unbekannt, candidateRouteIds daher leer) bleibt nur die
+  // grobe Annahme "irgendeine reale Strecke der eigenen Kategorie" -- Sternfahrt-Varianten
+  // bewusst ausgeklammert wie überall sonst bei der Ableitung.
+  const realRouteIdsByCategory = new Map<Category, string[]>();
+  for (const route of routes) {
+    if (route.baseRouteId) continue;
+    if (!realRouteIdsByCategory.has(route.category)) realRouteIdsByCategory.set(route.category, []);
+    realRouteIdsByCategory.get(route.category)!.push(route.id);
   }
 
   const counts = new Map<string, number>();
-  for (const key of routeIdsByPair.keys()) counts.set(key, 0);
+  const unclearCounts = new Map<string, number>();
+  for (const key of routeIdsByPair.keys()) {
+    counts.set(key, 0);
+    unclearCounts.set(key, 0);
+  }
 
   for (const position of positions) {
-    if (position.status !== "onCourse" && position.status !== "overdue") continue;
-    if (position.lastCheckpointId === null || position.nextCheckpointId === null) continue;
-    const key = pairKey(position.lastCheckpointId, position.nextCheckpointId);
-    const current = counts.get(key);
-    if (current !== undefined) counts.set(key, current + 1);
+    if (position.status === "onCourse" || position.status === "overdue") {
+      if (position.lastCheckpointId === null || position.nextCheckpointId === null) continue;
+      const key = pairKey(position.lastCheckpointId, position.nextCheckpointId);
+      const current = counts.get(key);
+      if (current !== undefined) counts.set(key, current + 1);
+      continue;
+    }
+
+    if (position.status !== "ambiguousRoute" && position.status !== "routeConflict") continue;
+    if (position.lastCheckpointId === null) continue;
+
+    const candidateRouteIds =
+      position.status === "ambiguousRoute"
+        ? position.candidateRouteIds
+        : (position.category ? realRouteIdsByCategory.get(position.category) : undefined) ?? [];
+
+    // Ein Fahrer zählt je Abschnitt höchstens einmal, auch wenn ihn mehrere seiner
+    // Kandidatenstrecken teilen (analog zur riderCount-Logik oben).
+    const alreadyCounted = new Set<string>();
+    for (const routeId of candidateRouteIds) {
+      const toIds = nextIdsByRoute.get(routeId)?.get(position.lastCheckpointId);
+      if (!toIds) continue;
+      for (const toId of toIds) {
+        const key = pairKey(position.lastCheckpointId, toId);
+        if (alreadyCounted.has(key)) continue;
+        alreadyCounted.add(key);
+        const current = unclearCounts.get(key);
+        if (current !== undefined) unclearCounts.set(key, current + 1);
+      }
+    }
   }
 
   return Array.from(routeIdsByPair.entries()).map(([key, routeIdSet]) => {
@@ -52,6 +111,7 @@ export function computeCheckpointPairOccupancy(positions: RiderPosition[], route
       toCheckpointId,
       routeIds: Array.from(routeIdSet),
       riderCount: counts.get(key)!,
+      unclearCount: unclearCounts.get(key)!,
     };
   });
 }
@@ -64,6 +124,7 @@ export interface NamedPairOccupancy {
   fromName: string;
   toName: string;
   riderCount: number;
+  unclearCount: number;
   /**
    * Einer der ursprünglichen Abschnitte dieser Gruppe (eigene Checkpoint-IDs + eigene
    * Strecken-IDs) — als Anker für z.B. eine Geometrie-Positionierung, die IDs und Strecke
@@ -91,8 +152,12 @@ export function groupCheckpointPairsByName(
     const toName = checkpointName(pair.toCheckpointId);
     const key = `${fromName}::${toName}`;
     const existing = byName.get(key);
-    if (existing) existing.riderCount += pair.riderCount;
-    else byName.set(key, { fromName, toName, riderCount: pair.riderCount, representative: pair });
+    if (existing) {
+      existing.riderCount += pair.riderCount;
+      existing.unclearCount += pair.unclearCount;
+    } else {
+      byName.set(key, { fromName, toName, riderCount: pair.riderCount, unclearCount: pair.unclearCount, representative: pair });
+    }
   }
   return Array.from(byName.values()).sort(
     (a, b) => a.fromName.localeCompare(b.fromName) || a.toName.localeCompare(b.toName),
