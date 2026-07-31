@@ -12,6 +12,9 @@ export function openDb(pathOrMemory: string): Db {
       start_number TEXT NOT NULL,
       checkpoint_id TEXT NOT NULL,
       timestamp_utc TEXT NOT NULL,
+      -- Nur bei Kontrollen-Scans über die AppSheet-Anbindung gesetzt (siehe
+      -- apps-script/Code.gs) -- wann die Zeile im Sheet ankam, nicht wann sie passierte.
+      technical_timestamp_utc TEXT,
       -- Timestamp bewusst Teil des Unique-Keys: manche Strecken besuchen denselben
       -- Checkpoint mehrfach (Schleifen), ein Fahrer kann also legitim zwei Scans mit
       -- derselben checkpoint_id haben. Der Key dedupliziert weiterhin echte
@@ -32,19 +35,32 @@ export function openDb(pathOrMemory: string): Db {
       value TEXT NOT NULL
     );
   `);
+  ensureTechnicalTimestampColumn(db);
   return db;
+}
+
+/**
+ * Migration für bereits bestehende DB-Dateien von vor Einführung von
+ * technical_timestamp_utc -- CREATE TABLE IF NOT EXISTS legt die Spalte nur bei einer
+ * brandneuen Tabelle an, ändert eine bereits existierende nicht nachträglich.
+ */
+function ensureTechnicalTimestampColumn(db: Db): void {
+  const columns = db.prepare(`PRAGMA table_info(scans)`).all() as Array<{ name: string }>;
+  if (!columns.some((c) => c.name === "technical_timestamp_utc")) {
+    db.exec(`ALTER TABLE scans ADD COLUMN technical_timestamp_utc TEXT`);
+  }
 }
 
 /** Fügt Scans ein, überspringt bereits bekannte (start_number, checkpoint_id)-Paare. Gibt die Anzahl neu eingefügter Zeilen zurück. */
 export function insertScans(db: Db, scans: ScanRecord[]): number {
   const stmt = db.prepare(
-    `INSERT OR IGNORE INTO scans (start_number, checkpoint_id, timestamp_utc) VALUES (?, ?, ?)`,
+    `INSERT OR IGNORE INTO scans (start_number, checkpoint_id, timestamp_utc, technical_timestamp_utc) VALUES (?, ?, ?, ?)`,
   );
   let inserted = 0;
   db.exec("BEGIN");
   try {
     for (const r of scans) {
-      const result = stmt.run(r.startNumber, r.checkpointId, r.timestampUtc);
+      const result = stmt.run(r.startNumber, r.checkpointId, r.timestampUtc, r.technicalTimestampUtc ?? null);
       inserted += Number(result.changes);
     }
     db.exec("COMMIT");
@@ -58,11 +74,12 @@ export function insertScans(db: Db, scans: ScanRecord[]): number {
 export function getAllScans(db: Db): ScanRecord[] {
   const rows = db
     .prepare(
-      `SELECT start_number as startNumber, checkpoint_id as checkpointId, timestamp_utc as timestampUtc
+      `SELECT start_number as startNumber, checkpoint_id as checkpointId, timestamp_utc as timestampUtc,
+              technical_timestamp_utc as technicalTimestampUtc
        FROM scans ORDER BY timestamp_utc ASC`,
     )
-    .all();
-  return rows as unknown as ScanRecord[];
+    .all() as unknown as Array<ScanRecord & { technicalTimestampUtc: string | null }>;
+  return rows.map((r) => ({ ...r, technicalTimestampUtc: r.technicalTimestampUtc ?? undefined }));
 }
 
 export function replaceRoster(db: Db, roster: RosterEntry[]): void {

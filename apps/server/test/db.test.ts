@@ -1,3 +1,7 @@
+import { DatabaseSync } from "node:sqlite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   getAllScans,
@@ -59,6 +63,69 @@ describe("insertScans", () => {
     ]);
     const scans = getAllScans(db);
     expect(scans.map((s) => s.checkpointId)).toEqual(["CP1", "CP2"]);
+  });
+
+  it("speichert und liefert technicalTimestampUtc, wenn vorhanden (Kontrollen-Scans)", () => {
+    insertScans(db, [
+      {
+        startNumber: "101",
+        checkpointId: "K1",
+        timestampUtc: "2026-07-25T09:00:00.000Z",
+        technicalTimestampUtc: "2026-07-25T09:00:05.000Z",
+      },
+    ]);
+    expect(getAllScans(db)[0].technicalTimestampUtc).toBe("2026-07-25T09:00:05.000Z");
+  });
+
+  it("lässt technicalTimestampUtc undefined statt null, wenn nicht vorhanden (Start/Ziel-Scans)", () => {
+    insertScans(db, [{ startNumber: "101", checkpointId: "START", timestampUtc: "2026-07-25T09:00:00.000Z" }]);
+    expect(getAllScans(db)[0].technicalTimestampUtc).toBeUndefined();
+  });
+});
+
+describe("openDb Migration", () => {
+  it("ergänzt technical_timestamp_utc in einer bereits bestehenden DB-Datei ohne diese Spalte", () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "rtfvis-db-migration-test-"));
+    const dbPath = path.join(dataDir, "old-schema.db");
+    try {
+      // Simuliert den Stand VOR Einführung von technical_timestamp_utc.
+      const oldDb = new DatabaseSync(dbPath);
+      oldDb.exec(`
+        CREATE TABLE scans (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          start_number TEXT NOT NULL,
+          checkpoint_id TEXT NOT NULL,
+          timestamp_utc TEXT NOT NULL,
+          UNIQUE(start_number, checkpoint_id, timestamp_utc)
+        );
+      `);
+      oldDb.prepare(`INSERT INTO scans (start_number, checkpoint_id, timestamp_utc) VALUES (?, ?, ?)`).run(
+        "101",
+        "K1",
+        "2026-07-25T09:00:00.000Z",
+      );
+      oldDb.close();
+
+      const migratedDb = openDb(dbPath);
+      const scans = getAllScans(migratedDb);
+      expect(scans).toHaveLength(1);
+      expect(scans[0].technicalTimestampUtc).toBeUndefined();
+
+      insertScans(migratedDb, [
+        {
+          startNumber: "102",
+          checkpointId: "K1",
+          timestampUtc: "2026-07-25T09:01:00.000Z",
+          technicalTimestampUtc: "2026-07-25T09:01:05.000Z",
+        },
+      ]);
+      expect(getAllScans(migratedDb).find((s) => s.startNumber === "102")?.technicalTimestampUtc).toBe(
+        "2026-07-25T09:01:05.000Z",
+      );
+      migratedDb.close();
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 });
 

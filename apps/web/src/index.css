@@ -109,6 +109,18 @@ body {
   border: 1px solid #e5e7eb;
 }
 
+.connection-status-clickable {
+  cursor: pointer;
+}
+
+.connection-status-clickable:hover {
+  background: #f3f4f6;
+}
+
+.sync-status-ago {
+  color: #9ca3af;
+}
+
 .connection-status-headline {
   display: flex;
   align-items: center;

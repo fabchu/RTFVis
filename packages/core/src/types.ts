@@ -79,4 +79,11 @@ export interface ScanRecord {
   checkpointId: string;
   /** ISO 8601, immer in UTC (mit "Z"-Suffix). */
   timestampUtc: string;
+  /**
+   * Wann die Zeile im Google Sheet ankam (nicht wann das Ereignis stattfand) -- nur bei
+   * Kontrollen-Scans über die AppSheet-Anbindung gesetzt (siehe apps-script/Code.gs,
+   * markSyncTime()), nicht bei synthetisierten Start-/Ziel-Scans. Dient der
+   * Verbindungsstatus-Übersicht je Kontrollstation, nicht der Positionsberechnung.
+   */
+  technicalTimestampUtc?: string;
 }

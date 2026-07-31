@@ -11,6 +11,7 @@ import { computeCheckpointPairOccupancy } from "./segmentOccupancy.js";
 import { OrgaPanel } from "./sidebar/OrgaPanel.js";
 import { RiderDetail } from "./sidebar/RiderDetail.js";
 import { Sidebar } from "./sidebar/Sidebar.js";
+import { SyncStatusModal } from "./SyncStatusModal.js";
 import { TimelineControl } from "./TimelineControl.js";
 import { useClock } from "./useClock.js";
 import { useConnectionStatus } from "./useConnectionStatus.js";
@@ -31,6 +32,7 @@ export function App() {
   const [selectedStartNumber, setSelectedStartNumber] = useState<string | null>(null);
   const [safetyOverviewOpen, setSafetyOverviewOpen] = useState(false);
   const [rankingOpen, setRankingOpen] = useState(false);
+  const [syncStatusOpen, setSyncStatusOpen] = useState(false);
   const [showRiders, setShowRiders] = useState(true);
   const [showSegments, setShowSegments] = useState(true);
 
@@ -101,6 +103,7 @@ export function App() {
         connectionStatus={connection.status}
         connectionFetchError={connection.fetchError}
         connectionCheckedAtMs={connection.checkedAtMs}
+        onOpenSyncStatus={() => setSyncStatusOpen(true)}
       />
       <div className="map-area">
         <TimelineControl
@@ -166,6 +169,15 @@ export function App() {
             selectedStartNumber={selectedStartNumber}
             onSelectRider={setSelectedStartNumber}
             onClose={() => setSafetyOverviewOpen(false)}
+          />
+        )}
+
+        {syncStatusOpen && (
+          <SyncStatusModal
+            scans={scans}
+            checkpointsById={checkpointsById}
+            nowMs={clock.nowMs}
+            onClose={() => setSyncStatusOpen(false)}
           />
         )}
 

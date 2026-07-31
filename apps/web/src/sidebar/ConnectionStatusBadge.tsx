@@ -5,6 +5,7 @@ interface ConnectionStatusBadgeProps {
   status: ConnectionStatus | null;
   fetchError: string | null;
   checkedAtMs: number;
+  onOpenSyncStatus: () => void;
 }
 
 const HEALTH_LABELS: Record<ConnectionHealth, string> = {
@@ -13,7 +14,7 @@ const HEALTH_LABELS: Record<ConnectionHealth, string> = {
   error: "Fehler",
 };
 
-export function ConnectionStatusBadge({ status, fetchError, checkedAtMs }: ConnectionStatusBadgeProps) {
+export function ConnectionStatusBadge({ status, fetchError, checkedAtMs, onOpenSyncStatus }: ConnectionStatusBadgeProps) {
   const health: ConnectionHealth = fetchError
     ? "error"
     : status
@@ -23,7 +24,19 @@ export function ConnectionStatusBadge({ status, fetchError, checkedAtMs }: Conne
   const errorDetail = fetchError ?? (health !== "ok" ? status?.lastErrorMessage : null);
 
   return (
-    <div className={`connection-status connection-status-${health}`}>
+    <div
+      className={`connection-status connection-status-${health} connection-status-clickable`}
+      role="button"
+      tabIndex={0}
+      onClick={onOpenSyncStatus}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenSyncStatus();
+        }
+      }}
+      title="Verbindungsstatus je Kontrollstation anzeigen"
+    >
       <div className="connection-status-headline">
         <span className="connection-dot" />
         <span>{HEALTH_LABELS[health]}</span>

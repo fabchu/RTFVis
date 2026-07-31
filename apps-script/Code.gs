@@ -138,11 +138,17 @@ function readCheckpointScans(sinceIso) {
       if (!techValue) return true;
       return toIsoUtc(techValue) > sinceIso;
     })
-    .map((r) => ({
-      startNumber: String(r[SCANS_COLUMNS.startNumber]),
-      checkpointId: String(r[SCANS_COLUMNS.checkpointId]),
-      timestampUtc: toIsoUtc(r[SCANS_COLUMNS.timestamp]),
-    }));
+    .map((r) => {
+      const techValue = r[SCANS_COLUMNS.technicalTimestamp];
+      return {
+        startNumber: String(r[SCANS_COLUMNS.startNumber]),
+        checkpointId: String(r[SCANS_COLUMNS.checkpointId]),
+        timestampUtc: toIsoUtc(r[SCANS_COLUMNS.timestamp]),
+        // Fürs Frontend (Verbindungsstatus je Kontrollstation) -- nicht nur intern fürs
+        // since-Filtern. Leer, solange markSyncTime() die Zeile noch nicht gestempelt hat.
+        technicalTimestampUtc: techValue ? toIsoUtc(techValue) : undefined,
+      };
+    });
 }
 
 /**

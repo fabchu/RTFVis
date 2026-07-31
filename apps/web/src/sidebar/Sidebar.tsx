@@ -24,6 +24,7 @@ interface SidebarProps {
   connectionStatus: ConnectionStatus | null;
   connectionFetchError: string | null;
   connectionCheckedAtMs: number;
+  onOpenSyncStatus: () => void;
 }
 
 export function Sidebar({
@@ -41,6 +42,7 @@ export function Sidebar({
   connectionStatus,
   connectionFetchError,
   connectionCheckedAtMs,
+  onOpenSyncStatus,
 }: SidebarProps) {
   const categories = Array.from(new Set(routes.map((r) => r.category))).sort();
   const statuses = Object.keys(STATUS_LABELS) as (keyof typeof STATUS_LABELS)[];
@@ -85,6 +87,7 @@ export function Sidebar({
         status={connectionStatus}
         fetchError={connectionFetchError}
         checkedAtMs={connectionCheckedAtMs}
+        onOpenSyncStatus={onOpenSyncStatus}
       />
 
       <details
