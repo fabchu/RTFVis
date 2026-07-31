@@ -38,11 +38,23 @@ internen Routen-IDs gemappt, da das Sheet Klartext-Bezeichnungen statt unserer I
 Fahrer tatsächlich gestartet ist. Leer = noch nicht gestartet, kein Fehler — dafür gibt es
 in dieser Zeile schlicht (noch) keinen synthetisierten Start-Scan.
 
-**`Kontrolle`** — nur die Kontrollen unterwegs, NICHT Start oder Ziel:
+**`Kontrolle2`** — nur die Kontrollen unterwegs, NICHT Start oder Ziel. Befüllt über eine
+AppSheet-Anbindung (löst das alte, per Google-Formular befüllte `Kontrolle` ab), die
+Kontrollen bei Funklöchern lokal puffert und erst später synct:
 
-| Bandnummer | Kontrolle | Zeitstempel |
-|---|---|---|
-| 101 | K1 | 2026-07-25 09:14:32 |
+| ID | Bandnummer | Kontrolle | Zeitstempel | Zeitstempel_tech |
+|---|---|---|---|---|
+| 1 | 101 | K1 | 2026-07-25 09:14:32 | 2026-07-25 09:14:40 |
+
+`Zeitstempel` ist die Ereigniszeit (wann die Kontrolle stattfand), `Zeitstempel_tech` wann
+die Zeile im Sheet ankam (gesetzt von `markSyncTime()`, per `onChange`-Trigger). Der
+`since`-Filter beim Polling läuft bewusst gegen `Zeitstempel_tech`, nicht gegen
+`Zeitstempel` — sonst würde ein wegen Pufferung verspätet eingetroffener Scan mit "altem"
+Ereignis-Zeitstempel dauerhaft verloren gehen (spätere Polls fragen nur noch nach neueren
+Zeitstempeln). `Zeitstempel_tech` kann nie kleiner als `Zeitstempel` sein, daher ist eine
+gerade erst angekommene Zeile garantiert neuer als jedes bisherige `since` — unabhängig
+davon, wie alt ihr Ereignis tatsächlich war. Der zurückgegebene Scan trägt trotzdem weiter
+die Ereigniszeit als `timestampUtc` (entscheidend für Positions-/Tempoberechnung).
 
 **`Zurück im Ziel`** — eigenes Blatt für die Ziel-Ankunft:
 

@@ -22,12 +22,18 @@
 // ---- Konfiguration: an das echte Sheet anpassen ----------------------------------
 
 // Enthält NUR die Kontrollen unterwegs -- Start und Ziel sind bewusst NICHT hier drin,
-// siehe readStartScans()/readFinishScans() unten.
-const SCANS_SHEET_NAME = "Kontrolle";
+// siehe readStartScans()/readFinishScans() unten. "Kontrolle2" (AppSheet-Anbindung,
+// puffert Kontrollen bei Funklöchern) hat das alte, per Google-Formular befüllte
+// "Kontrolle" abgelöst.
+const SCANS_SHEET_NAME = "Kontrolle2";
 const SCANS_COLUMNS = {
   startNumber: "Bandnummer",
   checkpointId: "Kontrolle",
   timestamp: "Zeitstempel",
+  // Wann die Zeile im Sheet ankam (gesetzt von markSyncTime()) -- NICHT wann die Kontrolle
+  // stattfand. Der "since"-Filter läuft bewusst gegen DIESE Spalte, siehe
+  // readCheckpointScans() unten.
+  technicalTimestamp: "Zeitstempel_tech",
 };
 
 const ROSTER_SHEET_NAME = "TN Übersicht";
@@ -101,16 +107,37 @@ function readRoster() {
  *  3. Ziel: eigenes Blatt mit nur Zeitstempel + Bandnummer.
  */
 function readScans(sinceIso) {
-  const scans = readCheckpointScans().concat(readStartScans(), readFinishScans());
+  const checkpointScans = readCheckpointScans(sinceIso);
+  const otherScans = readStartScans().concat(readFinishScans());
+  const filteredOtherScans = sinceIso ? otherScans.filter((s) => s.timestampUtc > sinceIso) : otherScans;
 
-  if (!sinceIso) return scans;
-  return scans.filter((s) => s.timestampUtc > sinceIso);
+  return checkpointScans.concat(filteredOtherScans);
 }
 
-function readCheckpointScans() {
+/**
+ * Kontrolle2 wird über AppSheet befüllt, das Kontrollen bei Funklöchern lokal puffert und
+ * erst später synct -- der Ereignis-Zeitstempel ("Zeitstempel") einer nachträglich
+ * eingetroffenen Zeile kann dann schon lange vor dem aktuellen "since"-Cutoff liegen. Der
+ * "since"-Filter läuft deshalb NICHT gegen "Zeitstempel", sondern gegen
+ * "Zeitstempel_tech" (wann die Zeile im Sheet ankam, siehe markSyncTime()) -- die kann per
+ * Definition nie kleiner sein als der Ereignis-Zeitstempel, und da der Server "since" immer
+ * nur wenig hinter dem zuletzt gesehenen Zeitpunkt her berechnet, ist eine gerade erst
+ * angekommene Zeile garantiert neuer als "since", unabhängig davon, wie alt ihr Ereignis
+ * tatsächlich war. Der zurückgegebene timestampUtc bleibt trotzdem die Ereigniszeit --
+ * die zählt für Positions-/Tempoberechnung.
+ * Noch nicht gestempelte Zeilen (Zeitstempel_tech leer, z.B. minimales Zeitfenster vor dem
+ * onChange-Trigger) werden sicherheitshalber NIE gefiltert, nie verloren.
+ */
+function readCheckpointScans(sinceIso) {
   const rows = readSheetAsRecords(SCANS_SHEET_NAME);
   return rows
     .filter((r) => r[SCANS_COLUMNS.startNumber] && r[SCANS_COLUMNS.timestamp])
+    .filter((r) => {
+      if (!sinceIso) return true;
+      const techValue = r[SCANS_COLUMNS.technicalTimestamp];
+      if (!techValue) return true;
+      return toIsoUtc(techValue) > sinceIso;
+    })
     .map((r) => ({
       startNumber: String(r[SCANS_COLUMNS.startNumber]),
       checkpointId: String(r[SCANS_COLUMNS.checkpointId]),
@@ -186,4 +213,24 @@ function readSheetAsRecords(sheetName) {
 
 function jsonResponse(body) {
   return ContentService.createTextOutput(JSON.stringify(body)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Stempelt "Zeitstempel_tech" (wann die Zeile im Sheet ankam) auf neue, noch ungestempelte
+ * Kontrolle2-Zeilen -- läuft über einen onChange-Trigger, damit AppSheet-Synchronisationen
+ * (auch nach einem gepufferten Funkloch) zeitnah erfasst werden. Diese Spalte ist die
+ * Grundlage für den "since"-Filter beim Polling, siehe readCheckpointScans() oben.
+ */
+function markSyncTime() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Kontrolle2");
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idCol = headers.indexOf("ID");
+  const syncCol = headers.indexOf("Zeitstempel_tech");
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][idCol] && !data[i][syncCol]) {
+      sheet.getRange(i + 1, syncCol + 1).setValue(new Date());
+    }
+  }
 }
