@@ -52,7 +52,11 @@ export function Sidebar({
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [categoriesOpen, setCategoriesOpen] = useState(true);
   const [segmentsOpen, setSegmentsOpen] = useState(true);
-  const [collapsed, setCollapsed] = useState(false);
+  // Auf dem Handy (< 768px, siehe MOBILE_BREAKPOINT in index.css) wird die Sidebar zum
+  // Overlay über der Karte statt sie zur Seite zu drängen -- dort startet sie standardmäßig
+  // zu, damit man beim ersten Laden direkt die Karte sieht statt eine fast bildschirmfüllende
+  // Sidebar. Nur der initiale Wert wird per Breite bestimmt, kein Resize-Listener danach.
+  const [collapsed, setCollapsed] = useState(() => window.innerWidth < 768);
 
   if (collapsed) {
     return (
@@ -70,7 +74,14 @@ export function Sidebar({
   }
 
   return (
-    <aside className="sidebar">
+    <>
+      {/* Nur auf dem Handy sichtbar (siehe CSS) -- tippen schließt die Sidebar wieder, wie
+          bei einem typischen Overlay-Drawer. Auf dem Desktop per display:none inert.
+          Bewusst ALS GESCHWISTER vor <aside>, nicht darin verschachtelt: ein z-index
+          innerhalb der Sidebar würde sonst eine eigene Stapelreihenfolge aufmachen und den
+          eigenen Sidebar-Inhalt (inkl. Zuklapp-Button) überdecken statt nur die Karte. */}
+      <div className="sidebar-backdrop" onClick={() => setCollapsed(true)} />
+      <aside className="sidebar">
       <div className="sidebar-header">
         <h1 className="sidebar-title">RTFVis</h1>
         <button
@@ -190,5 +201,6 @@ export function Sidebar({
         ))}
       </ul>
     </aside>
+    </>
   );
 }

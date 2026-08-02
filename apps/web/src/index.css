@@ -63,6 +63,11 @@ body {
   align-items: center;
 }
 
+/* Nur unterhalb von MOBILE_BREAKPOINT (siehe Media Query am Dateiende) sichtbar. */
+.sidebar-backdrop {
+  display: none;
+}
+
 .sidebar-section {
   margin-bottom: 12px;
   border: 1px solid #e5e7eb;
@@ -733,4 +738,30 @@ body {
   font-size: 0.8rem;
   padding: 6px 8px;
   border-bottom: 1px solid #e5e7eb;
+}
+
+/**
+ * MOBILE_BREAKPOINT: unterhalb dieser Breite wird die Sidebar zum Overlay über der Karte
+ * statt sie per Flexbox zur Seite zu drängen -- bei einer festen Sidebar-Breite von 300px
+ * bliebe der Karte sonst auf einem Handy kaum noch Platz, und über der Karte schwebende
+ * Elemente (z.B. der Rangliste-Button) würden in die Sidebar hineinragen. .map-area füllt
+ * automatisch die volle Breite, sobald .sidebar aus dem Flex-Fluss raus ist (position:fixed).
+ */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 100;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.25);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 99;
+  }
 }
