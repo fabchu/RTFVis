@@ -27,6 +27,9 @@ body {
   border-right: 1px solid #e5e7eb;
   padding: 12px;
   overflow-y: auto;
+  /* Ohne eigenen Hintergrund fiel das im normalen Flex-Layout nie auf -- als Overlay auf
+     dem Handy (siehe Media Query am Dateiende) läge sonst die Karte sichtbar darunter. */
+  background: white;
 }
 
 .sidebar-header {
