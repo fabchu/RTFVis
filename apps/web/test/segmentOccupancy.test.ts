@@ -200,6 +200,80 @@ describe("computeCheckpointPairOccupancy: unclearCount", () => {
     const result = computeCheckpointPairOccupancy(positions, routes);
     expect(result.every((p) => p.unclearCount === 0)).toBe(true);
   });
+
+  describe("Sternfahrer auf der zweiten (verdoppelten) Streckenhälfte", () => {
+    // Nachbildung einer generateSternfahrtVariants()-Ausgabe: dieselbe Checkpoint-Liste
+    // zweimal hintereinander, mit fortlaufend steigender Distanz -- siehe sternfahrt.ts.
+    const rtfShortSternfahrt: Route = {
+      id: "rtf-short-sternfahrt",
+      category: "RTF",
+      name: "RTF kurz (Sternfahrt)",
+      totalDistanceM: 60_000,
+      checkpoints: [
+        { id: "START", distanceM: 0, deviationM: 0 },
+        { id: "CP1", distanceM: 10_000, deviationM: 0 },
+        { id: "CP2", distanceM: 20_000, deviationM: 0 },
+        { id: "FINISH_SHORT", distanceM: 30_000, deviationM: 0 },
+        { id: "START", distanceM: 30_000, deviationM: 0 },
+        { id: "CP1", distanceM: 40_000, deviationM: 0 },
+        { id: "CP2", distanceM: 50_000, deviationM: 0 },
+        { id: "FINISH_SHORT", distanceM: 60_000, deviationM: 0 },
+      ],
+      geometry: [],
+      cumulativeM: [],
+      baseRouteId: "rtf-short",
+    };
+    const routesWithVariant = [...routes, rtfShortSternfahrt];
+
+    it("zählt einen Sternfahrer NACH seiner offiziellen Start/Ziel-Durchfahrt als unclearCount statt riderCount", () => {
+      // Letzter Checkpoint CP1 auf der zweiten Hälfte (distanceM 40_000 >= 60_000/2).
+      const sternfahrer = position({
+        routeId: "rtf-short-sternfahrt",
+        candidateRouteIds: ["rtf-short-sternfahrt"],
+        lastCheckpointId: "CP1",
+        lastCheckpointDistanceM: 40_000,
+        nextCheckpointId: "CP2",
+        nextCheckpointDistanceM: 50_000,
+      });
+      const result = computeCheckpointPairOccupancy([sternfahrer], routesWithVariant);
+      const pair = result.find((p) => p.fromCheckpointId === "CP1" && p.toCheckpointId === "CP2");
+      expect(pair?.unclearCount).toBe(1);
+      expect(pair?.riderCount).toBe(0);
+    });
+
+    it("zählt einen Sternfahrer VOR seiner offiziellen Start/Ziel-Durchfahrt weiterhin ganz normal als riderCount", () => {
+      // Letzter Checkpoint CP1 auf der ERSTEN Hälfte (distanceM 10_000 < 60_000/2) -- er
+      // muss zwangsläufig weiter Richtung Start/Ziel fahren, das ist nicht unklar.
+      const sternfahrer = position({
+        routeId: "rtf-short-sternfahrt",
+        candidateRouteIds: ["rtf-short-sternfahrt"],
+        lastCheckpointId: "CP1",
+        lastCheckpointDistanceM: 10_000,
+        nextCheckpointId: "CP2",
+        nextCheckpointDistanceM: 20_000,
+      });
+      const result = computeCheckpointPairOccupancy([sternfahrer], routesWithVariant);
+      const pair = result.find((p) => p.fromCheckpointId === "CP1" && p.toCheckpointId === "CP2");
+      expect(pair?.riderCount).toBe(1);
+      expect(pair?.unclearCount).toBe(0);
+    });
+
+    it("gilt auch für overdue-Sternfahrer auf der zweiten Hälfte", () => {
+      const sternfahrer = position({
+        status: "overdue",
+        routeId: "rtf-short-sternfahrt",
+        candidateRouteIds: ["rtf-short-sternfahrt"],
+        lastCheckpointId: "CP1",
+        lastCheckpointDistanceM: 40_000,
+        nextCheckpointId: "CP2",
+        nextCheckpointDistanceM: 50_000,
+      });
+      const result = computeCheckpointPairOccupancy([sternfahrer], routesWithVariant);
+      const pair = result.find((p) => p.fromCheckpointId === "CP1" && p.toCheckpointId === "CP2");
+      expect(pair?.unclearCount).toBe(1);
+      expect(pair?.riderCount).toBe(0);
+    });
+  });
 });
 
 describe("groupCheckpointPairsByName", () => {

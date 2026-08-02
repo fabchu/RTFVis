@@ -7,9 +7,10 @@ export interface CheckpointPairOccupancy {
   routeIds: string[];
   riderCount: number;
   /**
-   * Fahrer mit unklarer Streckenzuordnung (ambiguousRoute/routeConflict), die THEORETISCH auf
-   * diesem Abschnitt sein könnten -- grobe Schätzung, keine exakte Zuordnung (siehe
-   * computeCheckpointPairOccupancy). Bewusst getrennt von riderCount, damit dieser weiterhin
+   * Fahrer, deren Position auf diesem Abschnitt nicht verlässlich ist -- entweder unklare
+   * Streckenzuordnung (ambiguousRoute/routeConflict) oder ein Sternfahrer, der bereits sein
+   * Start/Ziel-Durchfahrt hinter sich hat (siehe computeCheckpointPairOccupancy). Grobe
+   * Schätzung, keine exakte Zuordnung. Bewusst getrennt von riderCount, damit dieser weiterhin
    * ein eindeutiger, verlässlicher Wert bleibt.
    */
   unclearCount: number;
@@ -33,8 +34,18 @@ export interface CheckpointPairOccupancy {
  * könnten (siehe unten). Sonst würde ein Streckenposten bei "0 Fahrer unterwegs" fälschlich
  * annehmen können, dass niemand mehr kommt, obwohl da noch ein Fahrer mit unklarer Zuordnung
  * unterwegs sein könnte. "finished" und "notStarted" zählen weiterhin nirgends mit.
+ *
+ * Sonderfall Sternfahrer (siehe preprocess/sternfahrt.ts): auf einer Sternfahrt-Variante
+ * verdoppelt sich die Checkpoint-Liste, damit der Fahrer über Start/Ziel hinweg weiter
+ * verfolgt werden kann -- wir wissen aber NICHT, wie weit er nach seiner offiziellen
+ * Start/Ziel-Durchfahrt tatsächlich noch fährt (er hört bei seinem eigenen Einstiegspunkt
+ * auf, ohne das zu scannen). Ein "onCourse"/"overdue"-Sternfahrer, dessen letzter Checkpoint
+ * bereits auf der zweiten (verdoppelten) Hälfte seiner Variante liegt, landet deshalb
+ * ebenfalls in unclearCount statt riderCount für seinen aktuellen Abschnitt -- die Annahme
+ * "er fährt sicher bis zum nächsten Checkpoint" trifft für ihn strukturell nicht zu.
  */
 export function computeCheckpointPairOccupancy(positions: RiderPosition[], routes: Route[]): CheckpointPairOccupancy[] {
+  const routeById = new Map(routes.map((r) => [r.id, r]));
   const routeIdsByPair = new Map<string, Set<string>>();
   // Je Strecke: Checkpoint-ID -> Menge der direkt folgenden Checkpoint-IDs (an JEDER Position,
   // falls die Strecke denselben Checkpoint mehrfach besucht) -- Grundlage für unclearCount.
@@ -75,8 +86,19 @@ export function computeCheckpointPairOccupancy(positions: RiderPosition[], route
     if (position.status === "onCourse" || position.status === "overdue") {
       if (position.lastCheckpointId === null || position.nextCheckpointId === null) continue;
       const key = pairKey(position.lastCheckpointId, position.nextCheckpointId);
-      const current = counts.get(key);
-      if (current !== undefined) counts.set(key, current + 1);
+
+      // Sternfahrer auf der zweiten (verdoppelten) Hälfte ihrer Variante -- siehe Docstring
+      // oben -- zählen als unklar statt sicher, auch wenn nextCheckpointId eindeutig ist.
+      const representativeRouteId = position.routeId ?? position.candidateRouteIds[0];
+      const representativeRoute = representativeRouteId ? routeById.get(representativeRouteId) : undefined;
+      const isUncertainSternfahrtTail =
+        representativeRoute?.baseRouteId !== undefined &&
+        position.lastCheckpointDistanceM !== null &&
+        position.lastCheckpointDistanceM >= representativeRoute.totalDistanceM / 2;
+
+      const target = isUncertainSternfahrtTail ? unclearCounts : counts;
+      const current = target.get(key);
+      if (current !== undefined) target.set(key, current + 1);
       continue;
     }
 
