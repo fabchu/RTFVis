@@ -767,4 +767,50 @@ body {
     background: rgba(0, 0, 0, 0.4);
     z-index: 99;
   }
+
+  /*
+   * Über der Karte schwebende Elemente sind für Desktop-Breiten positioniert (z.B. der
+   * Replay-Regler fest 200px breit, der Rangliste-Button rechts neben der Zeitleiste) --
+   * auf einem schmalen Handy-Display würde die Zeitleiste dadurch weit über den Bildschirm
+   * hinausragen und vom Rangliste-Button verdeckt werden (siehe Regler-Problem). Deshalb:
+   * Zeitleiste wird volle Breite mit einem SCHRUMPFBAREN Regler, Rangliste-Button wandert
+   * nach unten rechts (spiegelbildlich zum Sicherheitsübersicht-Button unten links), und die
+   * Fahrer-Detailkarte wird zu einem Bottom-Sheet statt oben rechts zu kollidieren.
+   */
+  .timeline-control {
+    left: 12px;
+    right: 12px;
+  }
+
+  .timeline-replay-controls {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .timeline-replay-controls .play-pause-button,
+  .timeline-replay-controls .timeline-clock,
+  .timeline-replay-controls select {
+    flex-shrink: 0;
+  }
+
+  .timeline-slider {
+    flex: 1;
+    min-width: 40px;
+  }
+
+  .ranking-panel-button {
+    top: auto;
+    bottom: 12px;
+    right: 12px;
+  }
+
+  .rider-detail {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-height: 70vh;
+    border-radius: 12px 12px 0 0;
+  }
 }
