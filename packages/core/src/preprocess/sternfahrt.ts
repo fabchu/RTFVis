@@ -12,15 +12,23 @@ const LOOP_TOLERANCE_M = 300;
 
 /**
  * Erzeugt für jede RTF-/CTF-Rundstrecke eine zusätzliche "Sternfahrt"-Variante: dieselbe
- * Checkpoint-Liste und Geometrie zweimal hintereinander gehängt (das gemeinsame Start/
- * Ziel wird dabei nur einmal gezählt).
+ * (vollständige, inkl. FINISH) Checkpoint-Liste und Geometrie zweimal hintereinander
+ * gehängt.
  *
  * Hintergrund: Bei einer Sternfahrt steigt ein Teilnehmer nicht bei START, sondern bei
  * einem beliebigen Kontrollpunkt ein, fährt die Strecke vorwärts bis Start/Ziel (wo er
  * sich erstmals offiziell anmeldet) und fährt dann über START weiter, bis er wieder in
  * die Nähe seines eigenen Startpunkts kommt. Seine beobachtete Scan-Reihenfolge ist damit
  * eine "phasenverschobene" Version der normalen Streckenreihenfolge — keine Teilfolge der
- * reguläre Route mehr, aber sehr wohl eine Teilfolge von "die Strecke zweimal".
+ * regulären Route mehr, aber sehr wohl eine Teilfolge von "die Strecke zweimal".
+ *
+ * Beim Durchfahren von Start/Ziel entsteht dabei IMMER ein FINISH- und ein START-Scan
+ * (in dieser Reihenfolge — organisatorisch festgelegt, siehe apps-script/Code.gs), auch
+ * wenn der Fahrer dort nur durchfährt statt tatsächlich fertig zu sein. Die Checkpoint-
+ * Liste enthält deshalb bewusst KEINEN Sonderfall mehr, der das letzte FINISH vor dem
+ * Verdoppeln abschneidet (frühere Version) — das hätte einen Sternfahrer, der bei seiner
+ * Durchfahrt korrekt sowohl FINISH als auch START scannt, permanent als routeConflict
+ * gezeigt, weil "FINISH" in der Checkpoint-Liste der Variante gar nicht vorkam.
  *
  * Bewusst nur EINE Variante pro Strecke (nicht eine pro möglichem Einstiegspunkt): Da die
  * Variante jede Checkpoint-ID zweimal enthält, deckt eine einzige "doppelte Runde"
@@ -46,14 +54,11 @@ function isLoopRoute(route: Route): boolean {
 function buildSternfahrtVariant(baseRoute: Route): Route {
   const totalDistanceM = baseRoute.totalDistanceM;
 
-  // Der letzte Checkpoint (Ziel) fällt physisch mit dem ersten (Start) zusammen -> beim
-  // Aneinanderhängen einmal weglassen, sonst gäbe es zwei Scans für denselben Ort in
-  // unmittelbarer Folge.
-  const coreCheckpoints = baseRoute.checkpoints.slice(0, -1);
-
+  // Vollständige Checkpoint-Liste (inkl. FINISH) zweimal hintereinander -- siehe
+  // Kommentar an generateSternfahrtVariants() oben für den Hintergrund.
   const doubledCheckpoints = [
-    ...coreCheckpoints,
-    ...coreCheckpoints.map((c) => ({ ...c, distanceM: c.distanceM + totalDistanceM })),
+    ...baseRoute.checkpoints,
+    ...baseRoute.checkpoints.map((c) => ({ ...c, distanceM: c.distanceM + totalDistanceM })),
   ];
 
   return {

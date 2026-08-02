@@ -13,17 +13,22 @@ const T0 = Date.parse("2026-07-25T08:00:00Z");
 
 /**
  * Sternfahrt-Szenario: Der Fahrer startet physisch bei K2 (nicht bei START), fährt
- * vorwärts entlang der Strecke (K2 -> K3 -> K4 -> Ziel), meldet sich dort erstmals
- * offiziell an (Scan "START"), und fährt dann über START weiter (K1). Er wird bei der
- * Rückkehr zu K2 nicht mehr gescannt — sobald K1 gescannt ist, gilt er als fertig.
+ * vorwärts entlang der Strecke (K2 -> K3 -> K4 -> Start/Ziel), meldet sich dort erstmals
+ * offiziell an, und fährt dann über START weiter (K1). Er wird bei der Rückkehr zu K2
+ * nicht mehr gescannt — sobald K1 gescannt ist, gilt er als fertig.
  *
- * Beobachtete Scan-Reihenfolge: K3, K4, START, K1.
+ * Beim Durchfahren von Start/Ziel entsteht organisatorisch IMMER ein FINISH- und ein
+ * START-Scan (in dieser Reihenfolge, siehe apps-script/Code.gs) — auch wenn der Fahrer
+ * dort nur durchfährt statt tatsächlich fertig zu sein.
+ *
+ * Beobachtete Scan-Reihenfolge: K3, K4, FINISH, START, K1.
  * Route-Reihenfolge (rtf-rundkurs): START, K1, K2, K3, K4, FINISH.
  */
 const sternfahrtScans: ScanRecord[] = [
   scan("1", "K3", new Date(T0).toISOString()),
   scan("1", "K4", new Date(T0 + 1_000_000).toISOString()), // +1000s, 10km -> 10 m/s
-  scan("1", "START", new Date(T0 + 2_000_000).toISOString()), // +1000s, 10km -> 10 m/s
+  scan("1", "FINISH", new Date(T0 + 2_000_000).toISOString()), // +1000s, 10km -> 10 m/s
+  scan("1", "START", new Date(T0 + 2_000_000).toISOString()), // selber Zeitpunkt/Ort (Start/Ziel-Durchfahrt)
   scan("1", "K1", new Date(T0 + 3_000_000).toISOString()), // +1000s, 10km -> 10 m/s
 ];
 

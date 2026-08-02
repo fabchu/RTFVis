@@ -57,15 +57,29 @@ describe("generateSternfahrtVariants", () => {
     expect(variants).toHaveLength(0);
   });
 
-  it("hängt die Checkpoint-Liste ohne das doppelte Start/Ziel aneinander, mit fortlaufend steigender Distanz", () => {
+  it("hängt die VOLLSTÄNDIGE Checkpoint-Liste (inkl. FINISH) zweimal aneinander, mit fortlaufend steigender Distanz", () => {
+    // Beim Durchfahren von Start/Ziel entsteht organisatorisch immer ein FINISH- UND ein
+    // START-Scan (siehe apps-script/Code.gs) -- die Checkpoint-Liste der Variante muss
+    // FINISH deshalb kennen, auch mitten in der Sequenz, nicht nur am echten Ende.
     const [variant] = generateSternfahrtVariants([loopRoute("rtf-90", "RTF")]);
-    expect(variant.checkpoints.map((c) => c.id)).toEqual(["START", "K1", "K2", "K3", "START", "K1", "K2", "K3"]);
+    expect(variant.checkpoints.map((c) => c.id)).toEqual([
+      "START",
+      "K1",
+      "K2",
+      "K3",
+      "FINISH",
+      "START",
+      "K1",
+      "K2",
+      "K3",
+      "FINISH",
+    ]);
 
     const distances = variant.checkpoints.map((c) => c.distanceM);
     for (let i = 1; i < distances.length; i++) {
-      expect(distances[i]).toBeGreaterThan(distances[i - 1]);
+      expect(distances[i]).toBeGreaterThanOrEqual(distances[i - 1]);
     }
-    expect(distances).toEqual([0, 10_000, 20_000, 30_000, 40_000, 50_000, 60_000, 70_000]);
+    expect(distances).toEqual([0, 10_000, 20_000, 30_000, 40_000, 40_000, 50_000, 60_000, 70_000, 80_000]);
   });
 
   it("verdoppelt Geometrie und totalDistanceM konsistent", () => {
