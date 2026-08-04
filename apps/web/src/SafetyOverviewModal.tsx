@@ -6,6 +6,10 @@ import { computeSafetyOverview, type SafetyRow } from "./safety.js";
 
 interface SafetyOverviewModalProps {
   positions: RiderPosition[];
+  /** Bereits ignorierte Fahrer (siehe useIgnoredRiders) -- eigene Mini-Liste am Ende mit Zurückholen-Möglichkeit. */
+  ignoredPositions: RiderPosition[];
+  onIgnoreRider: (startNumber: string) => void;
+  onUnignoreRider: (startNumber: string) => void;
   routes: Route[];
   routeById: Map<string, Route>;
   checkpointsById: Map<string, CheckpointDef>;
@@ -134,6 +138,9 @@ function compareValues(a: string | number | null | undefined, b: string | number
  */
 export function SafetyOverviewModal({
   positions,
+  ignoredPositions,
+  onIgnoreRider,
+  onUnignoreRider,
   routes,
   routeById,
   checkpointsById,
@@ -146,6 +153,10 @@ export function SafetyOverviewModal({
   const [category, setCategory] = useState<Category | "all">("all");
   const [routeId, setRouteId] = useState<string | "all">("all");
   const [sort, setSort] = useState<SortState | null>(null);
+  // Standardmäßig eingeklappt: die Haupttabelle (die eigentlich relevanten Fahrer) soll nicht
+  // mit wachsender Ignoriert-Liste immer weniger Platz bekommen -- siehe Diskussion, die zu
+  // dieser Sektion geführt hat.
+  const [ignoredSectionOpen, setIgnoredSectionOpen] = useState(false);
 
   const categories = useMemo(() => Array.from(new Set(routes.map((r) => r.category))).sort(), [routes]);
   const routesInCategory = useMemo(
@@ -156,6 +167,10 @@ export function SafetyOverviewModal({
   const allRows = useMemo(
     () => computeSafetyOverview(positions, checkpointsById, scans, nowMs),
     [positions, checkpointsById, scans, nowMs],
+  );
+  const ignoredRows = useMemo(
+    () => computeSafetyOverview(ignoredPositions, checkpointsById, scans, nowMs),
+    [ignoredPositions, checkpointsById, scans, nowMs],
   );
 
   const filteredRows = useMemo(
@@ -250,6 +265,7 @@ export function SafetyOverviewModal({
                     {sort?.key === col.key && <span className="safety-sort-indicator">{sort.direction === "asc" ? " ▲" : " ▼"}</span>}
                   </th>
                 ))}
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -267,6 +283,17 @@ export function SafetyOverviewModal({
                     {COLUMNS.map((col) => (
                       <td key={col.key}>{col.render(row, route)}</td>
                     ))}
+                    <td>
+                      <button
+                        className="safety-ignore-button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onIgnoreRider(row.position.startNumber);
+                        }}
+                      >
+                        Ignorieren
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -274,6 +301,37 @@ export function SafetyOverviewModal({
           </table>
           {rows.length === 0 && <p className="empty-hint">Keine Fahrer für diese Filterauswahl.</p>}
         </div>
+
+        {ignoredRows.length > 0 && (
+          <div className="safety-ignored-section">
+            <button
+              className="safety-ignored-header"
+              onClick={() => setIgnoredSectionOpen((v) => !v)}
+              aria-expanded={ignoredSectionOpen}
+            >
+              <h3>Ignorierte Fahrer ({ignoredRows.length})</h3>
+              <span className="safety-sort-indicator">{ignoredSectionOpen ? "▲" : "▼"}</span>
+            </button>
+            {ignoredSectionOpen && (
+              <ul className="safety-ignored-list">
+                {ignoredRows.map((row) => (
+                  <li key={row.position.startNumber}>
+                    <span className="rider-number">#{row.position.startNumber}</span>
+                    <span className="safety-ignored-detail">
+                      {row.position.category ?? "—"} · zuletzt bei {row.lastCheckpointName ?? "—"}
+                    </span>
+                    <button
+                      className="safety-unignore-button"
+                      onClick={() => onUnignoreRider(row.position.startNumber)}
+                    >
+                      Zurückholen
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

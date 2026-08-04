@@ -5,7 +5,7 @@ import path from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { ServerConfig } from "./config.js";
-import { getAllScans, getRoster, type Db } from "./db.js";
+import { getAllScans, getIgnoredRiders, getRoster, ignoreRider, unignoreRider, type Db } from "./db.js";
 import type { PollStatusTracker } from "./pollStatus.js";
 
 const TILE_UPSTREAM_BASE = "https://tile.openstreetmap.org";
@@ -42,6 +42,24 @@ export function buildServer(
   app.get("/api/scans", async () => getAllScans(db));
   app.get("/api/routes", async () => routes);
   app.get("/api/checkpoints", async () => checkpoints);
+
+  // Von der Orga ignorierte Fahrer (siehe db.ts) -- serverseitig, damit alle gleichzeitig
+  // geöffneten Ansichten (z.B. mehrere Kontrollposten) dieselbe Markierung sehen.
+  app.get("/api/ignored-riders", async () => getIgnoredRiders(db));
+  app.post("/api/ignored-riders", async (request, reply) => {
+    const body = request.body as { startNumber?: unknown } | undefined;
+    const startNumber = typeof body?.startNumber === "string" ? body.startNumber.trim() : "";
+    if (!startNumber) {
+      return reply.code(400).send({ error: "startNumber (nicht-leerer String) erforderlich." });
+    }
+    ignoreRider(db, startNumber);
+    return reply.code(204).send();
+  });
+  app.delete("/api/ignored-riders/:startNumber", async (request, reply) => {
+    const { startNumber } = request.params as { startNumber: string };
+    unignoreRider(db, startNumber);
+    return reply.code(204).send();
+  });
 
   // Verbindungsstatus fürs Frontend (Anzeige, ob der Datenpfad zum Sheet noch funktioniert).
   app.get("/api/status", async () => ({

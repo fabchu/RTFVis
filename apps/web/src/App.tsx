@@ -15,6 +15,7 @@ import { SyncStatusModal } from "./SyncStatusModal.js";
 import { TimelineControl } from "./TimelineControl.js";
 import { useClock } from "./useClock.js";
 import { useConnectionStatus } from "./useConnectionStatus.js";
+import { useIgnoredRiders } from "./useIgnoredRiders.js";
 import { useRaceLiveData, useRaceStaticData } from "./useRaceData.js";
 
 const LIVE_POLL_INTERVAL_MS = 15_000;
@@ -24,6 +25,7 @@ export function App() {
   const { routes, checkpoints, loading: staticLoading, error: staticError } = useRaceStaticData();
   const { roster, scans, loading: liveLoading, error: liveError } = useRaceLiveData(LIVE_POLL_INTERVAL_MS);
   const connection = useConnectionStatus(STATUS_POLL_INTERVAL_MS);
+  const { ignoredStartNumbers, ignore: ignoreRider, unignore: unignoreRider } = useIgnoredRiders(STATUS_POLL_INTERVAL_MS);
 
   const replayBounds = useMemo(() => computeReplayBounds(scans, Date.now()), [scans]);
   const clock = useClock(replayBounds);
@@ -41,10 +43,22 @@ export function App() {
     () => computePositions(scans, routes, roster, clock.nowMs),
     [scans, routes, roster, clock.nowMs],
   );
+  // Von der Orga ignorierte Fahrer (siehe useIgnoredRiders) fließen NICHT in aktive Ansichten
+  // ein (Sidebar, Karte, Segmentauslastung, Kategorien-Übersicht, Sicherheitsübersicht) --
+  // sie zählen dort weder als unterwegs noch als überfällig/unklar. Die Sicherheitsübersicht
+  // zeigt sie separat (ignoredPositions) mit einer Zurückholen-Möglichkeit.
+  const activePositions = useMemo(
+    () => positions.filter((p) => !ignoredStartNumbers.has(p.startNumber)),
+    [positions, ignoredStartNumbers],
+  );
+  const ignoredPositions = useMemo(
+    () => positions.filter((p) => ignoredStartNumbers.has(p.startNumber)),
+    [positions, ignoredStartNumbers],
+  );
   const routeById = useMemo(() => new Map(routes.map((r) => [r.id, r])), [routes]);
   const filteredPositions = useMemo(
-    () => filterPositions(positions, filters, routeById),
-    [positions, filters, routeById],
+    () => filterPositions(activePositions, filters, routeById),
+    [activePositions, filters, routeById],
   );
   const checkpointsById = useMemo(() => new Map(checkpoints.map((c) => [c.id, c])), [checkpoints]);
 
@@ -60,11 +74,14 @@ export function App() {
   // Nutzt bewusst die VOLLE Streckenliste (inkl. Sternfahrt-Varianten): der Abschnitt
   // "letzter Checkpoint -> START" auf dem Rückweg existiert nur auf der Variante.
   const checkpointPairOccupancy = useMemo(
-    () => computeCheckpointPairOccupancy(positions, routes),
-    [positions, routes],
+    () => computeCheckpointPairOccupancy(activePositions, routes),
+    [activePositions, routes],
   );
   const categories = useMemo(() => Array.from(new Set(displayRoutes.map((r) => r.category))).sort(), [displayRoutes]);
-  const categorySummary = useMemo(() => computeCategorySummary(positions, categories), [positions, categories]);
+  const categorySummary = useMemo(
+    () => computeCategorySummary(activePositions, categories),
+    [activePositions, categories],
+  );
 
   // Streckendarstellung und Segmentauslastungsmarker auf der KARTE folgen (anders als die
   // immer vollständige Sidebar-Übersicht) den Kategorie-/Strecken-Filtern — inklusive einer
@@ -75,8 +92,8 @@ export function App() {
     [routes, filters.category, filters.routeId],
   );
   const mapCheckpointPairOccupancy = useMemo(
-    () => computeCheckpointPairOccupancy(positions, mapRoutes),
-    [positions, mapRoutes],
+    () => computeCheckpointPairOccupancy(activePositions, mapRoutes),
+    [activePositions, mapRoutes],
   );
 
   const selectedPosition = selectedStartNumber
@@ -144,7 +161,7 @@ export function App() {
           onToggleClustering={() => setClusteringEnabled((v) => !v)}
         />
 
-        <OrgaPanel positions={positions} onOpen={() => setSafetyOverviewOpen(true)} />
+        <OrgaPanel positions={activePositions} onOpen={() => setSafetyOverviewOpen(true)} />
 
         <button className="ranking-panel-button" onClick={() => setRankingOpen(true)}>
           Rangliste
@@ -164,7 +181,10 @@ export function App() {
 
         {safetyOverviewOpen && (
           <SafetyOverviewModal
-            positions={positions}
+            positions={activePositions}
+            ignoredPositions={ignoredPositions}
+            onIgnoreRider={ignoreRider}
+            onUnignoreRider={unignoreRider}
             routes={displayRoutes}
             routeById={routeById}
             checkpointsById={checkpointsById}

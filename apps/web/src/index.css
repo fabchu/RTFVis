@@ -734,6 +734,79 @@ body {
   color: #9ca3af;
 }
 
+.safety-ignore-button,
+.safety-unignore-button {
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+  background: white;
+  color: #6b7280;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.safety-ignore-button:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.safety-unignore-button:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.safety-ignored-section {
+  border-top: 1px solid #e5e7eb;
+  padding: 8px 20px 12px;
+  flex-shrink: 0;
+}
+
+.safety-ignored-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.safety-ignored-header h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+/* Feste Höhe für ~4 Zeilen (22px Zeile + 6px Abstand) statt unbegrenzt zu wachsen -- sonst
+   nimmt eine lange Ignoriert-Liste der eigentlich relevanten Haupttabelle den Platz weg. */
+.safety-ignored-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0 4px 0 0;
+  max-height: 112px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.safety-ignored-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+
+.safety-ignored-detail {
+  color: #9ca3af;
+  flex: 1;
+}
+
 .ranking-section-header td {
   background: #f3f4f6;
   color: #374151;

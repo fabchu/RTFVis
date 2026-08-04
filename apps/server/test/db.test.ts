@@ -5,12 +5,15 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   getAllScans,
+  getIgnoredRiders,
   getPollerState,
   getRoster,
+  ignoreRider,
   insertScans,
   openDb,
   replaceRoster,
   setPollerState,
+  unignoreRider,
   type Db,
 } from "../src/db.js";
 
@@ -155,6 +158,34 @@ describe("replaceRoster / getRoster", () => {
     const roster = getRoster(db);
     expect(roster).toHaveLength(1);
     expect(roster[0]).toEqual({ startNumber: "13", category: "Jedermann", routeId: "jed-13-korrigiert" });
+  });
+});
+
+describe("ignored_riders", () => {
+  it("ist anfangs leer", () => {
+    expect(getIgnoredRiders(db)).toEqual([]);
+  });
+
+  it("nimmt einen Fahrer in die Ignorieren-Liste auf", () => {
+    ignoreRider(db, "42");
+    expect(getIgnoredRiders(db)).toEqual(["42"]);
+  });
+
+  it("erneutes Ignorieren derselben Startnummer erzeugt keinen zweiten Eintrag", () => {
+    ignoreRider(db, "42");
+    ignoreRider(db, "42");
+    expect(getIgnoredRiders(db)).toEqual(["42"]);
+  });
+
+  it("unignoreRider nimmt die Markierung wieder zurück", () => {
+    ignoreRider(db, "42");
+    unignoreRider(db, "42");
+    expect(getIgnoredRiders(db)).toEqual([]);
+  });
+
+  it("unignoreRider für eine nie ignorierte Startnummer bleibt folgenlos", () => {
+    expect(() => unignoreRider(db, "999")).not.toThrow();
+    expect(getIgnoredRiders(db)).toEqual([]);
   });
 });
 

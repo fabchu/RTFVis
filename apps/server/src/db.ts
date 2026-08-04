@@ -34,6 +34,15 @@ export function openDb(pathOrMemory: string): Db {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    -- Von der Orga manuell als "ignorieren" markierte Fahrer (z.B. bekanntes Aufgeben ohne
+    -- weiteren Scan) -- zählen dann nicht mehr als überfällig/unklar und nicht mehr in der
+    -- Segmentauslastung. Bewusst serverseitig statt nur im Browser: mehrere Kontrollposten
+    -- können die Karte gleichzeitig offen haben und sollen dieselbe Markierung sehen.
+    CREATE TABLE IF NOT EXISTS ignored_riders (
+      start_number TEXT PRIMARY KEY,
+      ignored_at_utc TEXT NOT NULL
+    );
   `);
   ensureTechnicalTimestampColumn(db);
   return db;
@@ -114,6 +123,24 @@ export function getRoster(db: Db): RosterEntry[] {
     category: r.category as RosterEntry["category"],
     routeId: r.routeId ?? undefined,
   }));
+}
+
+export function getIgnoredRiders(db: Db): string[] {
+  const rows = db.prepare(`SELECT start_number as startNumber FROM ignored_riders`).all() as unknown as Array<{
+    startNumber: string;
+  }>;
+  return rows.map((r) => r.startNumber);
+}
+
+export function ignoreRider(db: Db, startNumber: string): void {
+  db.prepare(
+    `INSERT INTO ignored_riders (start_number, ignored_at_utc) VALUES (?, ?)
+     ON CONFLICT(start_number) DO UPDATE SET ignored_at_utc = excluded.ignored_at_utc`,
+  ).run(startNumber, new Date().toISOString());
+}
+
+export function unignoreRider(db: Db, startNumber: string): void {
+  db.prepare(`DELETE FROM ignored_riders WHERE start_number = ?`).run(startNumber);
 }
 
 export function getPollerState(db: Db, key: string): string | null {

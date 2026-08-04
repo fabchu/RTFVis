@@ -28,3 +28,25 @@ export function fetchCheckpoints(): Promise<CheckpointDef[]> {
 export function fetchStatus(): Promise<ConnectionStatus> {
   return getJson("/api/status");
 }
+
+export function fetchIgnoredRiders(): Promise<string[]> {
+  return getJson("/api/ignored-riders");
+}
+
+export async function ignoreRider(startNumber: string): Promise<void> {
+  const res = await fetch("/api/ignored-riders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ startNumber }),
+  });
+  if (!res.ok) {
+    throw new Error(`Ignorieren von Fahrer ${startNumber} fehlgeschlagen: ${res.status} ${res.statusText}`);
+  }
+}
+
+export async function unignoreRider(startNumber: string): Promise<void> {
+  const res = await fetch(`/api/ignored-riders/${encodeURIComponent(startNumber)}`, { method: "DELETE" });
+  if (!res.ok) {
+    throw new Error(`Zurückholen von Fahrer ${startNumber} fehlgeschlagen: ${res.status} ${res.statusText}`);
+  }
+}

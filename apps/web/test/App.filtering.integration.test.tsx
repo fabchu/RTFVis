@@ -103,6 +103,10 @@ vi.mock("../src/useConnectionStatus.js", () => ({
   useConnectionStatus: () => ({ status: null, fetchError: null, checkedAtMs: Date.now() }),
 }));
 
+vi.mock("../src/useIgnoredRiders.js", () => ({
+  useIgnoredRiders: () => ({ ignoredStartNumbers: new Set(), ignore: () => {}, unignore: () => {} }),
+}));
+
 const { App } = await import("../src/App.js");
 
 describe("App: Kategorie-Filter wirkt sich auf die Segmentauslastungsmarker der Karte aus (echte Produktionsdaten)", () => {

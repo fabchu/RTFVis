@@ -93,6 +93,44 @@ describe("GET /api/status", () => {
   });
 });
 
+describe("/api/ignored-riders", () => {
+  it("liefert eine leere Liste, solange niemand ignoriert wurde", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/ignored-riders" });
+    expect(res.json()).toEqual([]);
+  });
+
+  it("POST markiert einen Fahrer als ignoriert, GET listet ihn danach", async () => {
+    const postRes = await app.inject({ method: "POST", url: "/api/ignored-riders", payload: { startNumber: "42" } });
+    expect(postRes.statusCode).toBe(204);
+
+    const getRes = await app.inject({ method: "GET", url: "/api/ignored-riders" });
+    expect(getRes.json()).toEqual(["42"]);
+  });
+
+  it("POST ohne startNumber liefert 400", async () => {
+    const res = await app.inject({ method: "POST", url: "/api/ignored-riders", payload: {} });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("erneutes POST derselben Startnummer erzeugt keinen Duplikat-Eintrag", async () => {
+    await app.inject({ method: "POST", url: "/api/ignored-riders", payload: { startNumber: "42" } });
+    await app.inject({ method: "POST", url: "/api/ignored-riders", payload: { startNumber: "42" } });
+
+    const res = await app.inject({ method: "GET", url: "/api/ignored-riders" });
+    expect(res.json()).toEqual(["42"]);
+  });
+
+  it("DELETE nimmt die Ignorieren-Markierung wieder zurück", async () => {
+    await app.inject({ method: "POST", url: "/api/ignored-riders", payload: { startNumber: "42" } });
+
+    const deleteRes = await app.inject({ method: "DELETE", url: "/api/ignored-riders/42" });
+    expect(deleteRes.statusCode).toBe(204);
+
+    const getRes = await app.inject({ method: "GET", url: "/api/ignored-riders" });
+    expect(getRes.json()).toEqual([]);
+  });
+});
+
 describe("GET /tiles/:z/:x/:y.png", () => {
   it("lehnt ungültige Kachel-Koordinaten mit 400 ab", async () => {
     const res = await app.inject({ method: "GET", url: "/tiles/abc/1/2.png" });
