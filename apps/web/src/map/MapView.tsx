@@ -8,6 +8,11 @@ import type { CheckpointPairOccupancy } from "../segmentOccupancy.js";
 
 const ROUTES_SOURCE = "routes";
 const RIDERS_SOURCE = "riders";
+// Zweite, unclusterte Quelle mit denselben Daten für den Clustering-Toggle -- MapLibre legt
+// die "cluster"-Option beim Anlegen der Source fest, sie kann an einer bestehenden Source
+// nicht nachträglich umgeschaltet werden (siehe setLayerVisibilityWhenReady-Kommentar unten
+// für dasselbe Muster: zwei parallele Layer/Sourcen statt einer, die sich neu konfiguriert).
+const RIDERS_UNCLUSTERED_SOURCE = "riders-unclustered";
 const CHECKPOINTS_SOURCE = "checkpoints";
 const SEGMENT_OCCUPANCY_SOURCE = "segment-occupancy";
 
@@ -36,6 +41,7 @@ interface MapViewProps {
   onSelectRider: (startNumber: string | null) => void;
   showRiders: boolean;
   showSegments: boolean;
+  clusteringEnabled: boolean;
 }
 
 /**
@@ -89,6 +95,7 @@ export function MapView({
   onSelectRider,
   showRiders,
   showSegments,
+  clusteringEnabled,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -265,7 +272,45 @@ export function MapView({
         },
       });
 
+      // Unclusterte Variante derselben Punkte -- identisches Aussehen wie "riders-point",
+      // aber ohne cluster/clusterRadius auf der Source, damit bei aktiviertem Toggle
+      // wirklich JEDER Fahrer einzeln sichtbar bleibt, auch dicht beieinander liegende.
+      map.addSource(RIDERS_UNCLUSTERED_SOURCE, { type: "geojson", data: ridersToGeoJSON([]) });
+      map.addLayer({
+        id: "riders-point-unclustered",
+        type: "circle",
+        source: RIDERS_UNCLUSTERED_SOURCE,
+        paint: {
+          "circle-radius": 7,
+          "circle-color": [
+            "match",
+            ["get", "status"],
+            "notStarted",
+            STATUS_COLORS.notStarted,
+            "onCourse",
+            STATUS_COLORS.onCourse,
+            "overdue",
+            STATUS_COLORS.overdue,
+            "finished",
+            STATUS_COLORS.finished,
+            "routeConflict",
+            STATUS_COLORS.routeConflict,
+            "ambiguousRoute",
+            STATUS_COLORS.ambiguousRoute,
+            "#000000",
+          ],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1.5,
+        },
+        layout: { visibility: "none" },
+      });
+
       map.on("click", "riders-point", (e) => {
+        const feature = e.features?.[0];
+        const startNumber = feature?.properties?.startNumber;
+        if (startNumber) onSelectRiderRef.current(startNumber);
+      });
+      map.on("click", "riders-point-unclustered", (e) => {
         const feature = e.features?.[0];
         const startNumber = feature?.properties?.startNumber;
         if (startNumber) onSelectRiderRef.current(startNumber);
@@ -284,7 +329,7 @@ export function MapView({
             // Zoomstufe konnte nicht ermittelt werden -> Klick einfach ignorieren.
           });
       });
-      for (const layer of ["riders-point", "riders-cluster"]) {
+      for (const layer of ["riders-point", "riders-point-unclustered", "riders-cluster"]) {
         map.on("mouseenter", layer, () => {
           map.getCanvas().style.cursor = "pointer";
         });
@@ -331,7 +376,9 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    setSourceDataWhenReady(map, RIDERS_SOURCE, ridersToGeoJSON(mapPositions));
+    const data = ridersToGeoJSON(mapPositions);
+    setSourceDataWhenReady(map, RIDERS_SOURCE, data);
+    setSourceDataWhenReady(map, RIDERS_UNCLUSTERED_SOURCE, data);
   }, [mapPositions]);
 
   useEffect(() => {
@@ -347,8 +394,9 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    setLayerVisibilityWhenReady(map, ["riders-point", "riders-cluster", "riders-cluster-count"], showRiders);
-  }, [showRiders]);
+    setLayerVisibilityWhenReady(map, ["riders-point", "riders-cluster", "riders-cluster-count"], showRiders && clusteringEnabled);
+    setLayerVisibilityWhenReady(map, ["riders-point-unclustered"], showRiders && !clusteringEnabled);
+  }, [showRiders, clusteringEnabled]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -3,10 +3,19 @@ interface MapLayerTogglesProps {
   onToggleRiders: () => void;
   showSegments: boolean;
   onToggleSegments: () => void;
+  clusteringEnabled: boolean;
+  onToggleClustering: () => void;
 }
 
-/** Overlay über der Karte: schaltet die Fahrer- bzw. Segmentauslastungs-Marker ein/aus. */
-export function MapLayerToggles({ showRiders, onToggleRiders, showSegments, onToggleSegments }: MapLayerTogglesProps) {
+/** Overlay über der Karte: schaltet die Fahrer-, Segmentauslastungs- und Clustering-Marker ein/aus. */
+export function MapLayerToggles({
+  showRiders,
+  onToggleRiders,
+  showSegments,
+  onToggleSegments,
+  clusteringEnabled,
+  onToggleClustering,
+}: MapLayerTogglesProps) {
   return (
     <div className="map-layer-toggles">
       <button
@@ -22,6 +31,13 @@ export function MapLayerToggles({ showRiders, onToggleRiders, showSegments, onTo
         aria-pressed={showSegments}
       >
         Segmentauslastung
+      </button>
+      <button
+        className={clusteringEnabled ? "map-layer-toggle active" : "map-layer-toggle"}
+        onClick={onToggleClustering}
+        aria-pressed={clusteringEnabled}
+      >
+        Clustering
       </button>
     </div>
   );

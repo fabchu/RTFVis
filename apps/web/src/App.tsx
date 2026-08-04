@@ -35,6 +35,7 @@ export function App() {
   const [syncStatusOpen, setSyncStatusOpen] = useState(false);
   const [showRiders, setShowRiders] = useState(true);
   const [showSegments, setShowSegments] = useState(true);
+  const [clusteringEnabled, setClusteringEnabled] = useState(true);
 
   const positions = useMemo(
     () => computePositions(scans, routes, roster, clock.nowMs),
@@ -131,6 +132,7 @@ export function App() {
           onSelectRider={setSelectedStartNumber}
           showRiders={showRiders}
           showSegments={showSegments}
+          clusteringEnabled={clusteringEnabled}
         />
 
         <MapLayerToggles
@@ -138,6 +140,8 @@ export function App() {
           onToggleRiders={() => setShowRiders((v) => !v)}
           showSegments={showSegments}
           onToggleSegments={() => setShowSegments((v) => !v)}
+          clusteringEnabled={clusteringEnabled}
+          onToggleClustering={() => setClusteringEnabled((v) => !v)}
         />
 
         <OrgaPanel positions={positions} onOpen={() => setSafetyOverviewOpen(true)} />

@@ -171,6 +171,7 @@ describe("MapView: reagiert auf Prop-Änderungen wie sie App.tsx beim Filtern er
           onSelectRider={noop}
           showRiders={true}
           showSegments={true}
+          clusteringEnabled={true}
         />,
       );
     });
@@ -196,6 +197,7 @@ describe("MapView: reagiert auf Prop-Änderungen wie sie App.tsx beim Filtern er
           onSelectRider={noop}
           showRiders={true}
           showSegments={true}
+          clusteringEnabled={true}
         />,
       );
     });
@@ -221,6 +223,7 @@ describe("MapView: reagiert auf Prop-Änderungen wie sie App.tsx beim Filtern er
           onSelectRider={noop}
           showRiders={true}
           showSegments={true}
+          clusteringEnabled={true}
         />,
       );
     });
@@ -243,6 +246,7 @@ describe("MapView: reagiert auf Prop-Änderungen wie sie App.tsx beim Filtern er
           onSelectRider={noop}
           showRiders={true}
           showSegments={true}
+          clusteringEnabled={true}
         />,
       );
     });
@@ -286,6 +290,7 @@ describe("MapView: reagiert auf Prop-Änderungen wie sie App.tsx beim Filtern er
           onSelectRider={noop}
           showRiders={true}
           showSegments={true}
+          clusteringEnabled={true}
         />,
       );
     });
@@ -311,6 +316,7 @@ describe("MapView: reagiert auf Prop-Änderungen wie sie App.tsx beim Filtern er
           onSelectRider={noop}
           showRiders={true}
           showSegments={true}
+          clusteringEnabled={true}
         />,
       );
     });
@@ -331,6 +337,7 @@ describe("MapView: reagiert auf Prop-Änderungen wie sie App.tsx beim Filtern er
           onSelectRider={noop}
           showRiders={true}
           showSegments={true}
+          clusteringEnabled={true}
         />,
       );
     });
