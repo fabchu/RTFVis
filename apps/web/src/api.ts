@@ -50,3 +50,17 @@ export async function unignoreRider(startNumber: string): Promise<void> {
     throw new Error(`Zurückholen von Fahrer ${startNumber} fehlgeschlagen: ${res.status} ${res.statusText}`);
   }
 }
+
+export async function pausePolling(): Promise<void> {
+  const res = await fetch("/api/poller/pause", { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`Pausieren des Sheet-Pollings fehlgeschlagen: ${res.status} ${res.statusText}`);
+  }
+}
+
+export async function resumePolling(): Promise<void> {
+  const res = await fetch("/api/poller/resume", { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`Fortsetzen des Sheet-Pollings fehlgeschlagen: ${res.status} ${res.statusText}`);
+  }
+}

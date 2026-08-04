@@ -6,6 +6,7 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { ServerConfig } from "./config.js";
 import { getAllScans, getIgnoredRiders, getRoster, ignoreRider, unignoreRider, type Db } from "./db.js";
+import type { PollerHandle } from "./poller.js";
 import type { PollStatusTracker } from "./pollStatus.js";
 
 const TILE_UPSTREAM_BASE = "https://tile.openstreetmap.org";
@@ -19,6 +20,7 @@ export function buildServer(
     "routesDataDir" | "tileCacheDir" | "dataSource" | "pollIntervalMs" | "basicAuth" | "webDistDir"
   >,
   pollStatus: PollStatusTracker,
+  pollerHandle: Pick<PollerHandle, "pause" | "resume" | "isPaused">,
 ) {
   const app = Fastify({ logger: false });
 
@@ -67,8 +69,21 @@ export function buildServer(
     pollIntervalMs: config.pollIntervalMs,
     scanCount: getAllScans(db).length,
     riderCount: getRoster(db).length,
+    paused: pollerHandle.isPaused(),
     ...pollStatus.snapshot(),
   }));
+
+  // Pausiert/setzt das Sheet-Polling fort -- betrifft den EINEN Poller im Backend, also alle
+  // gleichzeitig geöffneten Ansichten (siehe poller.ts). Gedacht, um bei drohender
+  // Kontingent-Erschöpfung (Apps Script/AppSheet) kurzzeitig Luft zu verschaffen.
+  app.post("/api/poller/pause", async (_request, reply) => {
+    pollerHandle.pause();
+    return reply.code(204).send();
+  });
+  app.post("/api/poller/resume", async (_request, reply) => {
+    pollerHandle.resume();
+    return reply.code(204).send();
+  });
 
   app.get("/tiles/:z/:x/:yFile", async (request, reply) => {
     const { z, x, yFile } = request.params as { z: string; x: string; yFile: string };

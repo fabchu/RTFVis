@@ -1,5 +1,6 @@
 import { computePositions } from "@rtfvis/core";
 import { useMemo, useState } from "react";
+import { pausePolling, resumePolling } from "./api.js";
 import { computeCategorySummary } from "./categorySummary.js";
 import { computeReplayBounds } from "./clock.js";
 import { DEFAULT_FILTERS, filterPositions, routeMatchesFilters } from "./filters.js";
@@ -201,6 +202,15 @@ export function App() {
             scans={scans}
             checkpointsById={checkpointsById}
             nowMs={clock.nowMs}
+            status={connection.status}
+            onPause={async () => {
+              await pausePolling();
+              connection.refresh();
+            }}
+            onResume={async () => {
+              await resumePolling();
+              connection.refresh();
+            }}
             onClose={() => setSyncStatusOpen(false)}
           />
         )}

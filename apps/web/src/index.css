@@ -129,6 +129,27 @@ body {
   color: #9ca3af;
 }
 
+.sync-poller-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.sync-poller-control strong {
+  font-size: 0.9rem;
+}
+
+.sync-poller-hint {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  max-width: 46ch;
+}
+
 .connection-status-headline {
   display: flex;
   align-items: center;
@@ -153,6 +174,10 @@ body {
 
 .connection-status-error .connection-dot {
   background: #dc2626;
+}
+
+.connection-status-paused .connection-dot {
+  background: #2563eb;
 }
 
 .connection-detail {

@@ -1,5 +1,5 @@
 import { resolveCheckpointId } from "./checkpointIdMapping.js";
-import { getPollerState, insertScans, replaceRoster, setPollerState, type Db } from "./db.js";
+import { getPollerState, getRoster, insertScans, replaceRoster, setPollerState, type Db } from "./db.js";
 import { mapSheetRouteId } from "./routeNameMapping.js";
 import type { ScanSource } from "./sources/types.js";
 
@@ -17,12 +17,20 @@ const LATE_ARRIVAL_SAFETY_MARGIN_MS = 15 * 60 * 1000;
 export interface PollResult {
   insertedScans: number;
   rosterSize: number;
+  /** Startnummern, die im vorherigen Roster-Bestand noch nicht bekannt waren. */
+  newRiders: number;
 }
 
 export async function pollOnce(source: ScanSource, db: Db, validCheckpointIds: readonly string[]): Promise<PollResult> {
+  // Vor dem Überschreiben abfragen -- replaceRoster ersetzt den kompletten Bestand, ohne das
+  // gäbe es keine Grundlage, um "neue" Fahrer von schon bekannten zu unterscheiden (fürs
+  // Poll-Log, siehe index.ts).
+  const previousStartNumbers = new Set(getRoster(db).map((r) => r.startNumber));
+
   const rawRoster = await source.fetchRoster();
   const roster = rawRoster.map((entry) => ({ ...entry, routeId: mapSheetRouteId(entry.routeId) }));
   replaceRoster(db, roster);
+  const newRiders = roster.filter((entry) => !previousStartNumbers.has(entry.startNumber)).length;
 
   const lastSeen = getPollerState(db, LAST_SCAN_TIMESTAMP_KEY);
   const since =
@@ -40,7 +48,7 @@ export async function pollOnce(source: ScanSource, db: Db, validCheckpointIds: r
     setPollerState(db, LAST_SCAN_TIMESTAMP_KEY, newMax);
   }
 
-  return { insertedScans, rosterSize: roster.length };
+  return { insertedScans, rosterSize: roster.length, newRiders };
 }
 
 export interface PollerOptions {
@@ -53,17 +61,27 @@ export interface PollerOptions {
 
 export interface PollerHandle {
   stop: () => void;
+  /** Hält das Polling an, ohne es zu beenden -- z.B. um das Sheet/AppSheet-Kontingent zu
+   *  schonen. Ein bereits laufender Request wird nicht abgebrochen, nur der nächste Zyklus
+   *  nicht mehr eingeplant. Betrifft ALLE Betrachter, da der Poller einmalig im Backend läuft
+   *  (siehe useIgnoredRiders für dasselbe "geteilter Server-Zustand"-Muster). */
+  pause: () => void;
+  /** Setzt das Polling fort und stößt sofort einen Zyklus an (statt bis zum nächsten
+   *  planmäßigen Intervall zu warten). */
+  resume: () => void;
+  isPaused: () => boolean;
 }
 
 /** Startet Dauer-Polling mit exponentiellem Backoff bei Fehlern. */
 export function startPolling(source: ScanSource, db: Db, options: PollerOptions): PollerHandle {
   const maxBackoffMs = options.maxBackoffMs ?? options.intervalMs * 8;
   let stopped = false;
+  let paused = false;
   let consecutiveFailures = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const scheduleNext = (delayMs: number) => {
-    if (stopped) return;
+    if (stopped || paused) return;
     timer = setTimeout(runOnce, delayMs);
   };
 
@@ -88,5 +106,16 @@ export function startPolling(source: ScanSource, db: Db, options: PollerOptions)
       stopped = true;
       if (timer) clearTimeout(timer);
     },
+    pause: () => {
+      if (stopped || paused) return;
+      paused = true;
+      if (timer) clearTimeout(timer);
+    },
+    resume: () => {
+      if (stopped || !paused) return;
+      paused = false;
+      scheduleNext(0);
+    },
+    isPaused: () => paused,
   };
 }

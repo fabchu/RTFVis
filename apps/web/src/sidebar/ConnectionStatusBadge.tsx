@@ -12,6 +12,7 @@ const HEALTH_LABELS: Record<ConnectionHealth, string> = {
   ok: "Verbunden",
   stale: "Keine aktuellen Daten",
   error: "Fehler",
+  paused: "Sync pausiert",
 };
 
 export function ConnectionStatusBadge({ status, fetchError, checkedAtMs, onOpenSyncStatus }: ConnectionStatusBadgeProps) {

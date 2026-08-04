@@ -36,7 +36,21 @@ describe("pollOnce", () => {
     ]);
 
     const result = await pollOnce(source, db, TEST_CHECKPOINT_IDS);
-    expect(result).toEqual({ insertedScans: 1, rosterSize: 1 });
+    expect(result).toEqual({ insertedScans: 1, rosterSize: 1, newRiders: 1 });
+  });
+
+  it("zählt nur wirklich neue Startnummern als newRiders, nicht den ganzen Roster-Bestand", async () => {
+    const source = mockSource();
+    await pollOnce(source, db, TEST_CHECKPOINT_IDS); // Fahrer 101 ist jetzt bekannt.
+
+    (source.fetchRoster as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { startNumber: "101", category: "RTF" },
+      { startNumber: "102", category: "RTF" },
+    ]);
+    const result = await pollOnce(source, db, TEST_CHECKPOINT_IDS);
+
+    expect(result.newRiders).toBe(1);
+    expect(result.rosterSize).toBe(2);
   });
 
   it("fragt beim zweiten Poll mit since = letztem Zeitstempel minus 15-Minuten-Sicherheitsspanne", async () => {
@@ -155,6 +169,57 @@ describe("startPolling", () => {
 
     await vi.advanceTimersByTimeAsync(0);
     handle.stop();
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(onPollSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("pause() hält künftige Polls an, isPaused() meldet den Zustand", async () => {
+    const source = mockSource();
+    const onPollSuccess = vi.fn();
+    const handle = startPolling(source, db, { intervalMs: 1000, validCheckpointIds: TEST_CHECKPOINT_IDS, onPollSuccess });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onPollSuccess).toHaveBeenCalledTimes(1);
+    expect(handle.isPaused()).toBe(false);
+
+    handle.pause();
+    expect(handle.isPaused()).toBe(true);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(onPollSuccess).toHaveBeenCalledTimes(1);
+
+    handle.stop();
+  });
+
+  it("resume() setzt pausiertes Polling fort und stößt sofort einen neuen Zyklus an", async () => {
+    const source = mockSource();
+    const onPollSuccess = vi.fn();
+    const handle = startPolling(source, db, { intervalMs: 1000, validCheckpointIds: TEST_CHECKPOINT_IDS, onPollSuccess });
+
+    await vi.advanceTimersByTimeAsync(0);
+    handle.pause();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(onPollSuccess).toHaveBeenCalledTimes(1);
+
+    handle.resume();
+    expect(handle.isPaused()).toBe(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onPollSuccess).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onPollSuccess).toHaveBeenCalledTimes(3);
+
+    handle.stop();
+  });
+
+  it("pause() nach stop() bleibt folgenlos (kein Wiederbeleben eines gestoppten Pollers)", async () => {
+    const source = mockSource();
+    const onPollSuccess = vi.fn();
+    const handle = startPolling(source, db, { intervalMs: 1000, validCheckpointIds: TEST_CHECKPOINT_IDS, onPollSuccess });
+
+    await vi.advanceTimersByTimeAsync(0);
+    handle.stop();
+    handle.resume();
     await vi.advanceTimersByTimeAsync(5000);
 
     expect(onPollSuccess).toHaveBeenCalledTimes(1);

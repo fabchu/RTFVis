@@ -32,21 +32,23 @@ const pollStatus = new PollStatusTracker();
 const checkpointsPath = path.join(config.routesDataDir, "checkpoints.json");
 const validCheckpointIds = readCheckpointIds(checkpointsPath);
 
-startPolling(source, db, {
+const pollerHandle = startPolling(source, db, {
   intervalMs: config.pollIntervalMs,
   validCheckpointIds,
   onPollSuccess: (result) => {
     pollStatus.recordSuccess();
-    console.log(`[poll] ${result.insertedScans} neue Scans, Roster: ${result.rosterSize} Fahrer.`);
+    console.log(
+      `[poll] ${new Date().toISOString()} ${result.insertedScans} neue Scans, ${result.newRiders} neue Fahrer, Roster: ${result.rosterSize} Fahrer.`,
+    );
   },
   onPollError: (error, attempt) => {
     const message = error instanceof Error ? error.message : String(error);
     pollStatus.recordError(message, attempt);
-    console.error(`[poll] Fehler (Versuch ${attempt}):`, message);
+    console.error(`[poll] ${new Date().toISOString()} Fehler (Versuch ${attempt}):`, message);
   },
 });
 
-const server = buildServer(db, config, pollStatus);
+const server = buildServer(db, config, pollStatus, pollerHandle);
 server.listen({ port: config.httpPort, host: config.host }).then(() => {
   console.log(`Server läuft auf http://${config.host}:${config.httpPort}`);
 });

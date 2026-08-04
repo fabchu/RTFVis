@@ -1,14 +1,30 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { insertScans, openDb, replaceRoster, type Db } from "../src/db.js";
 import { PollStatusTracker } from "../src/pollStatus.js";
 import { buildServer } from "../src/server.js";
 
+/** Einfacher Test-Doppelgänger für PollerHandle -- verfolgt Aufrufe und hält einen simplen
+ *  paused-Zustand nach, ohne einen echten Poller/ScanSource aufzubauen. */
+function fakePollerHandle() {
+  let paused = false;
+  return {
+    pause: vi.fn(() => {
+      paused = true;
+    }),
+    resume: vi.fn(() => {
+      paused = false;
+    }),
+    isPaused: () => paused,
+  };
+}
+
 let db: Db;
 let dataDir: string;
 let pollStatus: PollStatusTracker;
+let pollerHandle: ReturnType<typeof fakePollerHandle>;
 let app: ReturnType<typeof buildServer>;
 
 beforeEach(() => {
@@ -17,6 +33,7 @@ beforeEach(() => {
   writeFileSync(path.join(dataDir, "routes.json"), JSON.stringify([{ id: "rtf-90" }]), "utf-8");
   writeFileSync(path.join(dataDir, "checkpoints.json"), JSON.stringify([{ id: "CP1" }]), "utf-8");
   pollStatus = new PollStatusTracker();
+  pollerHandle = fakePollerHandle();
   app = buildServer(
     db,
     {
@@ -27,6 +44,7 @@ beforeEach(() => {
       pollIntervalMs: 30_000,
     },
     pollStatus,
+    pollerHandle,
   );
 });
 
@@ -90,6 +108,31 @@ describe("GET /api/status", () => {
     expect(body.riderCount).toBe(1);
     expect(body.consecutiveFailures).toBe(2);
     expect(body.lastErrorMessage).toBe("Netzwerkfehler");
+  });
+
+  it("meldet paused=false, solange niemand pausiert hat", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/status" });
+    expect(res.json().paused).toBe(false);
+  });
+
+  it("meldet paused=true, nachdem der Poller pausiert wurde", async () => {
+    await app.inject({ method: "POST", url: "/api/poller/pause" });
+    const res = await app.inject({ method: "GET", url: "/api/status" });
+    expect(res.json().paused).toBe(true);
+  });
+});
+
+describe("/api/poller/pause und /api/poller/resume", () => {
+  it("POST /pause ruft pollerHandle.pause() auf", async () => {
+    const res = await app.inject({ method: "POST", url: "/api/poller/pause" });
+    expect(res.statusCode).toBe(204);
+    expect(pollerHandle.pause).toHaveBeenCalledOnce();
+  });
+
+  it("POST /resume ruft pollerHandle.resume() auf", async () => {
+    const res = await app.inject({ method: "POST", url: "/api/poller/resume" });
+    expect(res.statusCode).toBe(204);
+    expect(pollerHandle.resume).toHaveBeenCalledOnce();
   });
 });
 
@@ -163,6 +206,7 @@ describe("Basic Auth", () => {
           basicAuth: { user: "orga", pass: "geheim" },
         },
         pollStatus,
+        pollerHandle,
       );
     });
 
@@ -217,6 +261,7 @@ describe("Statisches Frontend-Ausliefern", () => {
         pollIntervalMs: 30_000,
       },
       pollStatus,
+      pollerHandle,
     );
 
     const res = await staticApp.inject({ method: "GET", url: "/" });

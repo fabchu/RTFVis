@@ -11,6 +11,7 @@ function status(overrides: Partial<ConnectionStatus>): ConnectionStatus {
     lastErrorAtMs: null,
     lastErrorMessage: null,
     consecutiveFailures: 0,
+    paused: false,
     ...overrides,
   };
 }
@@ -32,5 +33,11 @@ describe("computeConnectionHealth", () => {
     const s = status({ lastSuccessAtMs: 0, pollIntervalMs: 30_000 });
     expect(computeConnectionHealth(s, 89_999)).toBe("ok");
     expect(computeConnectionHealth(s, 90_001)).toBe("stale");
+  });
+
+  it("ist paused, wenn der Poller pausiert ist -- auch wenn das sonst wie stale/error aussähe", () => {
+    expect(computeConnectionHealth(status({ paused: true }), 1_010_000)).toBe("paused");
+    expect(computeConnectionHealth(status({ paused: true, consecutiveFailures: 3 }), 1_010_000)).toBe("paused");
+    expect(computeConnectionHealth(status({ paused: true, lastSuccessAtMs: null }), 1_010_000)).toBe("paused");
   });
 });

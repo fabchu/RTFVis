@@ -1,22 +1,39 @@
 import type { CheckpointDef, ScanRecord } from "@rtfvis/core";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { computeCheckpointSyncStatus } from "./checkpointSyncStatus.js";
-import { formatDurationMs, formatTimeWithSeconds } from "./format.js";
+import type { ConnectionStatus } from "./connectionStatus.js";
+import { formatDurationMs, formatTime, formatTimeWithSeconds } from "./format.js";
 
 interface SyncStatusModalProps {
   scans: ScanRecord[];
   checkpointsById: Map<string, CheckpointDef>;
   nowMs: number;
+  status: ConnectionStatus | null;
+  onPause: () => Promise<void>;
+  onResume: () => Promise<void>;
   onClose: () => void;
 }
 
 /**
  * Zeigt je Kontrollstation, wann sie zuletzt Daten ins Sheet gespielt hat (Zeitstempel_tech)
  * und welches Ereignis das war (Zeitstempel) -- Hilfsmittel, um Stationen mit möglichen
- * Verbindungsproblemen zu erkennen (lange her seit dem letzten Sync).
+ * Verbindungsproblemen zu erkennen (lange her seit dem letzten Sync). Bietet außerdem einen
+ * Pause/Fortsetzen-Schalter für das Sheet-Polling -- der Poller läuft nur einmal im Backend,
+ * betrifft also ALLE gleichzeitig geöffneten Ansichten, nicht nur den eigenen Browser.
  */
-export function SyncStatusModal({ scans, checkpointsById, nowMs, onClose }: SyncStatusModalProps) {
+export function SyncStatusModal({ scans, checkpointsById, nowMs, status, onPause, onResume, onClose }: SyncStatusModalProps) {
   const rows = useMemo(() => computeCheckpointSyncStatus(scans, checkpointsById), [scans, checkpointsById]);
+  const [pending, setPending] = useState(false);
+  const paused = status?.paused ?? false;
+
+  async function handleToggle() {
+    setPending(true);
+    try {
+      await (paused ? onResume() : onPause());
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <div className="safety-modal-backdrop" onClick={onClose}>
@@ -25,6 +42,22 @@ export function SyncStatusModal({ scans, checkpointsById, nowMs, onClose }: Sync
           <h2>Verbindungsstatus je Kontrollstation</h2>
           <button className="close-button" onClick={onClose} aria-label="Schließen">
             ×
+          </button>
+        </div>
+
+        <div className="sync-poller-control">
+          <div>
+            <strong>Sheet-Polling: {paused ? "pausiert" : "läuft"}</strong>
+            {!paused && status?.lastSuccessAtMs !== null && status?.lastSuccessAtMs !== undefined && (
+              <span className="connection-detail"> · zuletzt {formatTime(status.lastSuccessAtMs)}</span>
+            )}
+            <p className="sync-poller-hint">
+              Betrifft ALLE gerade geöffneten Ansichten, nicht nur diesen Browser -- z.B. nützlich, um kurzzeitig
+              Google-Kontingent zu schonen.
+            </p>
+          </div>
+          <button className={paused ? "safety-unignore-button" : "safety-ignore-button"} onClick={handleToggle} disabled={pending}>
+            {paused ? "Fortsetzen" : "Pausieren"}
           </button>
         </div>
 

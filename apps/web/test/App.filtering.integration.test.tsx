@@ -100,7 +100,7 @@ vi.mock("../src/useRaceData.js", () => ({
 }));
 
 vi.mock("../src/useConnectionStatus.js", () => ({
-  useConnectionStatus: () => ({ status: null, fetchError: null, checkedAtMs: Date.now() }),
+  useConnectionStatus: () => ({ status: null, fetchError: null, checkedAtMs: Date.now(), refresh: () => {} }),
 }));
 
 vi.mock("../src/useIgnoredRiders.js", () => ({
